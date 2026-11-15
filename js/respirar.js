@@ -12,7 +12,8 @@
     const CICLOS = 5;
     const SEGUNDOS_CICLO = FASES.reduce((t, f) => t + f.dur, 0); // 12
     const CIRCUNFERENCIA = 817;
-    const KEY_SESSOES = 'pluma_respiracao_sessoes';
+    const TECNICA = '3-4-5';
+    const api = window.VivaLeveAPI;
 
     const $ = (id) => document.getElementById(id);
 
@@ -22,6 +23,7 @@
     document.addEventListener('DOMContentLoaded', () => {
         const startBtn = $('startBtn');
         if (!startBtn) return;
+        if (!api.exigirLogin()) return;
 
         const resetBtn = $('resetBtn');
 
@@ -30,11 +32,15 @@
 
         const statsReset = $('statsReset');
         if (statsReset) {
-            statsReset.addEventListener('click', () => {
-                if (confirm('Limpar o histórico de sessões de respiração?')) {
-                    localStorage.removeItem(KEY_SESSOES);
-                    atualizarStats();
+            statsReset.addEventListener('click', async () => {
+                if (!confirm('Apagar todas as suas sessões de respiração? Isso não pode ser desfeito.')) return;
+                try {
+                    await api.respiracao.apagarTodas();
+                } catch (e) {
+                    if (api.tratarSemLogin(e)) return;
+                    alert(api.mensagemErro(e, 'Não foi possível apagar as sessões.'));
                 }
+                atualizarStats();
             });
         }
 
@@ -113,8 +119,7 @@
         $('breathingTimer').textContent = '';
         $('instructionLabel').textContent = 'Exercício concluído';
         $('instructionDesc').textContent = `Você fez ${CICLOS} ciclos de respiração 3-4-5`;
-        salvarSessao();
-        atualizarStats();
+        salvarSessao().then(atualizarStats);
     }
 
     // ---------- UI ----------
@@ -131,32 +136,28 @@
         void anel.getBoundingClientRect(); // força reflow antes da próxima transição
     }
 
-    // ---------- Sessões ----------
-    function lerSessoes() {
-        try { return JSON.parse(localStorage.getItem(KEY_SESSOES) || '[]'); }
-        catch (e) { return []; }
+    // ---------- Sessões (back-end: /v1/breathing) ----------
+    async function salvarSessao() {
+        try {
+            await api.respiracao.registrar({
+                technique: TECNICA,
+                cycles: CICLOS,
+                durationSeconds: CICLOS * SEGUNDOS_CICLO
+            });
+        } catch (e) {
+            if (api.tratarSemLogin(e)) return;
+            $('instructionDesc').textContent = 'Exercício concluído, mas a sessão não foi salva: ' + api.mensagemErro(e);
+        }
     }
 
-    function salvarSessao() {
-        const sessoes = lerSessoes();
-        sessoes.push({
-            id: Date.now().toString(),
-            tecnica: '3-4-5',
-            nome: 'Técnica 3-4-5',
-            data: new Date().toISOString(),
-            ciclos: CICLOS,
-            segundos: CICLOS * SEGUNDOS_CICLO
-        });
-        localStorage.setItem(KEY_SESSOES, JSON.stringify(sessoes));
-    }
-
-    function atualizarStats() {
-        const sessoes = lerSessoes();
-        const hoje = new Date().toDateString();
-        const hojeQtd = sessoes.filter((s) => new Date(s.data).toDateString() === hoje).length;
-        const segundos = sessoes.reduce((t, s) => t + (s.segundos || (s.ciclos || 0) * SEGUNDOS_CICLO), 0);
-        $('todaySessions').textContent = hojeQtd;
-        $('totalSessions').textContent = sessoes.length;
-        $('totalMinutes').textContent = Math.round(segundos / 60);
+    async function atualizarStats() {
+        try {
+            const s = await api.respiracao.stats();
+            $('todaySessions').textContent = s.todaySessions || 0;
+            $('totalSessions').textContent = s.totalSessions || 0;
+            $('totalMinutes').textContent = s.totalMinutes || 0;
+        } catch (e) {
+            api.tratarSemLogin(e);
+        }
     }
 })();

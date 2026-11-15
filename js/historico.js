@@ -1,389 +1,288 @@
 /**
  * Pluma - Histórico de Humor
- * Visualização de dados com Chart.js
+ * Dados do back-end (precisa de login):
+ *   /api/history/summary       cards de registros, sequências e sessões de respiração
+ *   /api/history/evolution     gráfico de linha (média do humor por dia)
+ *   /api/history/distribution  gráfico de rosca + emoção predominante
+ *   /v1/mood-logs/all          lista de registros recentes
+ * Gráficos com Chart.js (carregado no historico.html).
  */
 
-class HistoricoManager {
-    constructor() {
-        this.chart = null;
-        this.currentPeriod = 'semana';
-        this.init();
-    }
+const api = window.VivaLeveAPI;
 
-    init() {
-        this.setupEventListeners();
-        this.loadHistorico();
-        this.renderChart();
-        this.renderInsights();
-    }
+const DIAS_PERIODO = { week: 7, month: 30 };
+const RECENTES_INICIAL = 5;
 
-    setupEventListeners() {
-        // Filtros de período
-        document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
-                this.currentPeriod = e.target.dataset.period;
-                this.renderChart();
-                this.renderInsights();
-            });
+// O back dá nota 0 para ANSIOSO; no gráfico, o eixo vai de 0 a 5.
+const ROTULOS_NOTA = { 0: '😰', 1: '😢', 2: '😔', 3: '😐', 4: '🙂', 5: '😄' };
+
+let graficoEvolucao = null;
+let graficoEmocoes = null;
+let registros = [];
+let mostrarTodos = false;
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (!api.exigirLogin()) return;
+    configurarPeriodo();
+    configurarVerTodos();
+    carregarTudo();
+});
+
+function configurarPeriodo() {
+    document.querySelectorAll('.period-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            carregarGraficos(DIAS_PERIODO[btn.dataset.period] || 7);
         });
+    });
+}
 
-        // Tipo de visualização
-        document.querySelectorAll('.view-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
-                this.renderChart(e.target.dataset.view);
-            });
-        });
-    }
+function configurarVerTodos() {
+    const btn = document.getElementById('viewAllBtn');
+    if (!btn) return;
+    btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        mostrarTodos = !mostrarTodos;
+        btn.textContent = mostrarTodos ? 'Ver menos' : 'Ver todos';
+        renderizarLista();
+    });
+}
 
-    loadHistorico() {
-        const registros = JSON.parse(localStorage.getItem('pluma_humor_registros') || '[]');
-        return registros.sort((a, b) => new Date(b.data) - new Date(a.data));
-    }
+function periodoAtual() {
+    const ativo = document.querySelector('.period-btn.active');
+    return (ativo && DIAS_PERIODO[ativo.dataset.period]) || 7;
+}
 
-    getFilteredData() {
-        const registros = this.loadHistorico();
-        const hoje = new Date();
-        let dataInicio;
+async function carregarTudo() {
+    try {
+        const [resumo, lista, respiracao] = await Promise.all([
+            api.historicoEmocional.resumo(),
+            api.humor.todos(),
+            api.respiracao.stats().catch(() => null)
+        ]);
+        registros = (lista || []).slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        // /api/history/summary ainda devolve 0 sessões de respiração (TODO no back): usa /v1/breathing/stats
+        const r = { ...(resumo || {}) };
+        if (respiracao) r.breathingSessions = respiracao.totalSessions;
+        renderizarResumo(r);
 
-        switch (this.currentPeriod) {
-            case 'semana':
-                dataInicio = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
-                break;
-            case 'mes':
-                dataInicio = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000);
-                break;
-            case 'ano':
-                dataInicio = new Date(hoje.getTime() - 365 * 24 * 60 * 60 * 1000);
-                break;
-            default:
-                dataInicio = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
-        }
-
-        return registros.filter(r => new Date(r.data) >= dataInicio);
-    }
-
-    getMoodValue(humor) {
-        const valores = {
-            'muito-feliz': 5,
-            'feliz': 4,
-            'neutro': 3,
-            'triste': 2,
-            'muito-triste': 1
-        };
-        return valores[humor] || 3;
-    }
-
-    getMoodColor(humor) {
-        const cores = {
-            'muito-feliz': '#10B981',
-            'feliz': '#34D399',
-            'neutro': '#F59E0B',
-            'triste': '#F97316',
-            'muito-triste': '#EF4444'
-        };
-        return cores[humor] || '#94A3B8';
-    }
-
-    getMoodEmoji(humor) {
-        const emojis = {
-            'muito-feliz': '😄',
-            'feliz': '🙂',
-            'neutro': '😐',
-            'triste': '😢',
-            'muito-triste': '😭'
-        };
-        return emojis[humor] || '😐';
-    }
-
-    renderChart(type = 'line') {
-        const ctx = document.getElementById('humorChart');
-        if (!ctx) return;
-
-        const dados = this.getFilteredData();
-        
-        if (this.chart) {
-            this.chart.destroy();
-        }
-
-        if (dados.length === 0) {
-            this.showEmptyState();
+        if (registros.length === 0) {
+            mostrarVazio(true);
             return;
         }
+        mostrarVazio(false);
+        renderizarLista();
+        await carregarGraficos(periodoAtual());
+    } catch (e) {
+        if (api.tratarSemLogin(e)) return;
+        mostrarErro(api.mensagemErro(e));
+    }
+}
 
-        const labels = dados.map(r => {
-            const data = new Date(r.data);
-            return data.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric' });
-        }).reverse();
+async function carregarGraficos(dias) {
+    try {
+        const [evolucao, distribuicao] = await Promise.all([
+            api.historicoEmocional.evolucao(dias),
+            api.historicoEmocional.distribuicao(dias)
+        ]);
+        renderizarEvolucao(evolucao || []);
+        renderizarDistribuicao(distribuicao || { items: [], total: 0 });
+    } catch (e) {
+        if (api.tratarSemLogin(e)) return;
+        mostrarErro(api.mensagemErro(e));
+    }
+}
 
-        const values = dados.map(r => this.getMoodValue(r.humor)).reverse();
-        const colors = dados.map(r => this.getMoodColor(r.humor)).reverse();
+// ---------------------------------------------------------------- cards
 
-        const chartConfig = {
-            type: type === 'bar' ? 'bar' : 'line',
+function texto(id, valor) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = valor;
+}
+
+function renderizarResumo(r) {
+    const atual = r.currentStreak || 0;
+    texto('totalRecords', r.totalRecords || 0);
+    texto('streakDays', atual);
+    texto('bestStreak', r.bestStreak || 0);
+    texto('breathingSessions', r.breathingSessions || 0);
+    texto('currentStreak', atual);
+    texto('streakMessage', atual === 0
+        ? 'Registre seu humor hoje para começar uma sequência.'
+        : atual === 1 ? 'Bom começo! Volte amanhã.' : 'Continue assim!');
+}
+
+// ---------------------------------------------------------------- gráfico de evolução
+
+function renderizarEvolucao(pontos) {
+    const canvas = document.getElementById('moodChart');
+    if (!canvas || typeof Chart === 'undefined') return;
+    if (graficoEvolucao) graficoEvolucao.destroy();
+
+    // dias sem registro vêm com averageScore null: ficam fora do gráfico
+    const ordenados = pontos
+        .filter(p => p.count > 0 && p.averageScore !== null && p.averageScore !== undefined)
+        .sort((a, b) => a.date.localeCompare(b.date));
+    const labels = ordenados.map(p => {
+        const [ano, mes, dia] = p.date.split('-').map(Number);
+        return new Date(ano, mes - 1, dia).toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric' });
+    });
+
+    graficoEvolucao = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Humor médio do dia',
+                data: ordenados.map(p => Number(p.averageScore.toFixed(2))),
+                borderColor: '#8B5CF6',
+                backgroundColor: 'rgba(139, 92, 246, 0.12)',
+                borderWidth: 3,
+                fill: true,
+                tension: 0.35,
+                pointBackgroundColor: '#8B5CF6',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2,
+                pointRadius: 5
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            const p = ordenados[ctx.dataIndex];
+                            return ` Média ${p.averageScore.toFixed(1)} · ${p.count} registro(s)`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    min: 0,
+                    max: 5,
+                    ticks: { stepSize: 1, callback: (v) => ROTULOS_NOTA[v] || '' },
+                    grid: { color: 'rgba(0, 0, 0, 0.05)' }
+                },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+}
+
+// ---------------------------------------------------------------- distribuição
+
+function renderizarDistribuicao(dist) {
+    const itens = (dist.items || []).filter(i => i.count > 0).sort((a, b) => b.count - a.count);
+
+    // Rosca
+    const canvas = document.getElementById('emotionsChart');
+    if (canvas && typeof Chart !== 'undefined') {
+        if (graficoEmocoes) graficoEmocoes.destroy();
+        const dados = itens.map(i => Pluma.getEmotionData(api.emocao.daApi(i.mood)));
+        graficoEmocoes = new Chart(canvas, {
+            type: 'doughnut',
             data: {
-                labels: labels,
+                labels: dados.map(d => `${d.icon} ${d.label}`),
                 datasets: [{
-                    label: 'Nível de Humor',
-                    data: values,
-                    borderColor: '#8B5CF6',
-                    backgroundColor: type === 'bar' ? colors : 'rgba(139, 92, 246, 0.1)',
-                    borderWidth: 3,
-                    fill: type !== 'bar',
-                    tension: 0.4,
-                    pointBackgroundColor: colors,
-                    pointBorderColor: '#fff',
-                    pointBorderWidth: 2,
-                    pointRadius: 6,
-                    pointHoverRadius: 8
+                    data: itens.map(i => i.count),
+                    backgroundColor: dados.map(d => d.color),
+                    borderWidth: 2,
+                    borderColor: '#fff'
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    },
-                    tooltip: {
-                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                        padding: 12,
-                        titleFont: { size: 14 },
-                        bodyFont: { size: 13 },
-                        callbacks: {
-                            label: (context) => {
-                                const registro = dados.reverse()[context.dataIndex];
-                                const emoji = this.getMoodEmoji(registro.humor);
-                                return `${emoji} ${registro.humor.replace('-', ' ')}`;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    y: {
-                        min: 0,
-                        max: 6,
-                        ticks: {
-                            stepSize: 1,
-                            callback: (value) => {
-                                const labels = ['', '😭', '😢', '😐', '🙂', '😄', ''];
-                                return labels[value] || '';
-                            }
-                        },
-                        grid: {
-                            color: 'rgba(0, 0, 0, 0.05)'
-                        }
-                    },
-                    x: {
-                        grid: {
-                            display: false
-                        }
-                    }
-                }
+                plugins: { legend: { position: 'bottom' } }
             }
-        };
-
-        this.chart = new Chart(ctx, chartConfig);
-    }
-
-    showEmptyState() {
-        const container = document.querySelector('.chart-container');
-        if (container) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-icon">📊</div>
-                    <h3>Sem dados ainda</h3>
-                    <p>Comece a registrar seu humor para ver as estatísticas aqui.</p>
-                    <a href="humor.html" class="btn-primary">Registrar Humor</a>
-                </div>
-            `;
-        }
-    }
-
-    renderInsights() {
-        const dados = this.getFilteredData();
-        const insightsContainer = document.getElementById('insights');
-        
-        if (!insightsContainer || dados.length === 0) {
-            if (insightsContainer) {
-                insightsContainer.innerHTML = `
-                    <div class="insight-card">
-                        <p>Registre seu humor por alguns dias para receber insights personalizados.</p>
-                    </div>
-                `;
-            }
-            return;
-        }
-
-        // Calcular estatísticas
-        const total = dados.length;
-        const media = dados.reduce((acc, r) => acc + this.getMoodValue(r.humor), 0) / total;
-        
-        // Humor mais frequente
-        const frequencia = {};
-        dados.forEach(r => {
-            frequencia[r.humor] = (frequencia[r.humor] || 0) + 1;
         });
-        const humorFrequente = Object.entries(frequencia).sort((a, b) => b[1] - a[1])[0];
-
-        // Tendência
-        const primeiraMeta = dados.slice(Math.floor(total / 2));
-        const segundaMetade = dados.slice(0, Math.floor(total / 2));
-        const mediaPrimeira = primeiraMeta.reduce((acc, r) => acc + this.getMoodValue(r.humor), 0) / (primeiraMeta.length || 1);
-        const mediaSegunda = segundaMetade.reduce((acc, r) => acc + this.getMoodValue(r.humor), 0) / (segundaMetade.length || 1);
-        const tendencia = mediaSegunda - mediaPrimeira;
-
-        // Dias consecutivos positivos
-        let diasPositivos = 0;
-        for (const r of dados) {
-            if (this.getMoodValue(r.humor) >= 4) {
-                diasPositivos++;
-            } else {
-                break;
-            }
-        }
-
-        insightsContainer.innerHTML = `
-            <div class="insight-card">
-                <div class="insight-icon">📈</div>
-                <div class="insight-content">
-                    <h4>Média de Humor</h4>
-                    <p class="insight-value">${media.toFixed(1)} / 5</p>
-                    <p class="insight-desc">${this.getMediaDescription(media)}</p>
-                </div>
-            </div>
-            
-            <div class="insight-card">
-                <div class="insight-icon">${this.getMoodEmoji(humorFrequente[0])}</div>
-                <div class="insight-content">
-                    <h4>Humor Mais Frequente</h4>
-                    <p class="insight-value">${humorFrequente[0].replace('-', ' ')}</p>
-                    <p class="insight-desc">${humorFrequente[1]} de ${total} registros</p>
-                </div>
-            </div>
-            
-            <div class="insight-card">
-                <div class="insight-icon">${tendencia > 0 ? '📈' : tendencia < 0 ? '📉' : '➡️'}</div>
-                <div class="insight-content">
-                    <h4>Tendência</h4>
-                    <p class="insight-value">${this.getTendenciaText(tendencia)}</p>
-                    <p class="insight-desc">${this.getTendenciaDesc(tendencia)}</p>
-                </div>
-            </div>
-            
-            <div class="insight-card">
-                <div class="insight-icon">🔥</div>
-                <div class="insight-content">
-                    <h4>Sequência Positiva</h4>
-                    <p class="insight-value">${diasPositivos} dias</p>
-                    <p class="insight-desc">${diasPositivos > 0 ? 'Continue assim!' : 'Vamos melhorar juntos'}</p>
-                </div>
-            </div>
-        `;
     }
 
-    getMediaDescription(media) {
-        if (media >= 4.5) return 'Excelente! Você está radiante!';
-        if (media >= 3.5) return 'Muito bom! Continue cuidando de você.';
-        if (media >= 2.5) return 'Neutro. Que tal algumas atividades relaxantes?';
-        if (media >= 1.5) return 'Momento difícil. Estamos aqui por você.';
-        return 'Procure apoio. Você não está sozinho.';
+    // Emoção predominante
+    if (dist.predominant) {
+        const d = Pluma.getEmotionData(api.emocao.daApi(dist.predominant));
+        texto('dominantIcon', d.icon);
+        texto('dominantLabel', d.label);
+        texto('dominantPercent', `${Math.round(dist.predominantPercentage || 0)}% dos registros`);
+    } else {
+        texto('dominantIcon', '😶');
+        texto('dominantLabel', 'Sem registros no período');
+        texto('dominantPercent', '');
     }
 
-    getTendenciaText(tendencia) {
-        if (tendencia > 0.5) return 'Melhorando';
-        if (tendencia < -0.5) return 'Em queda';
-        return 'Estável';
-    }
-
-    getTendenciaDesc(tendencia) {
-        if (tendencia > 0.5) return 'Seu humor está melhorando!';
-        if (tendencia < -0.5) return 'Vamos trabalhar nisso juntos.';
-        return 'Mantendo a constância.';
-    }
-}
-
-// Lista de registros
-class RegistrosLista {
-    constructor() {
-        this.init();
-    }
-
-    init() {
-        this.renderLista();
-    }
-
-    renderLista() {
-        const container = document.getElementById('registros-lista');
-        if (!container) return;
-
-        const registros = JSON.parse(localStorage.getItem('pluma_humor_registros') || '[]');
-        
-        if (registros.length === 0) {
-            container.innerHTML = `
-                <div class="empty-list">
-                    <p>Nenhum registro encontrado.</p>
-                </div>
-            `;
-            return;
-        }
-
-        const registrosOrdenados = registros.sort((a, b) => new Date(b.data) - new Date(a.data));
-
-        container.innerHTML = registrosOrdenados.map(r => {
-            const data = new Date(r.data);
-            const dataFormatada = data.toLocaleDateString('pt-BR', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long'
-            });
-
-            const emojis = {
-                'muito-feliz': '😄',
-                'feliz': '🙂',
-                'neutro': '😐',
-                'triste': '😢',
-                'muito-triste': '😭'
-            };
-
+    // Barras por emoção
+    const breakdown = document.getElementById('emotionsBreakdown');
+    if (breakdown) {
+        breakdown.innerHTML = itens.map(i => {
+            const id = api.emocao.daApi(i.mood);
+            const d = Pluma.getEmotionData(id);
+            const pct = Math.round(i.percentage || 0);
             return `
-                <div class="registro-item" data-id="${r.id}">
-                    <div class="registro-emoji">${emojis[r.humor] || '😐'}</div>
-                    <div class="registro-info">
-                        <span class="registro-data">${dataFormatada}</span>
-                        <span class="registro-humor">${r.humor.replace('-', ' ')}</span>
-                        ${r.nota ? `<p class="registro-nota">${r.nota}</p>` : ''}
-                        ${r.fatores && r.fatores.length > 0 ? `
-                            <div class="registro-fatores">
-                                ${r.fatores.map(f => `<span class="fator-tag">${f}</span>`).join('')}
-                            </div>
-                        ` : ''}
+                <div class="emotion-bar">
+                    <span class="emotion-bar-icon">${d.icon}</span>
+                    <div class="emotion-bar-info">
+                        <div class="emotion-bar-label">
+                            <span class="emotion-bar-name">${d.label}</span>
+                            <span class="emotion-bar-percent">${pct}%</span>
+                        </div>
+                        <div class="emotion-bar-progress">
+                            <div class="emotion-bar-fill ${id}" style="width: ${pct}%"></div>
+                        </div>
                     </div>
-                    <button class="btn-delete" onclick="deletarRegistro('${r.id}')" aria-label="Deletar registro">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                        </svg>
-                    </button>
                 </div>
             `;
         }).join('');
     }
 }
 
-function deletarRegistro(id) {
-    if (confirm('Tem certeza que deseja deletar este registro?')) {
-        const registros = JSON.parse(localStorage.getItem('pluma_humor_registros') || '[]');
-        const novosRegistros = registros.filter(r => r.id !== id);
-        localStorage.setItem('pluma_humor_registros', JSON.stringify(novosRegistros));
-        location.reload();
-    }
+// ---------------------------------------------------------------- lista de registros
+
+function renderizarLista() {
+    const container = document.getElementById('historyItems');
+    if (!container) return;
+
+    const visiveis = mostrarTodos ? registros : registros.slice(0, RECENTES_INICIAL);
+    const btn = document.getElementById('viewAllBtn');
+    if (btn) btn.style.display = registros.length > RECENTES_INICIAL ? '' : 'none';
+
+    container.innerHTML = visiveis.map(r => {
+        const d = Pluma.getEmotionData(api.emocao.daApi(r.mood));
+        const data = new Date(r.createdAt);
+        const hora = data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        return `
+            <div class="history-item">
+                <div class="history-item-date">
+                    <div class="history-item-day">${data.getDate()}</div>
+                    <div class="history-item-month">${Pluma.getMonthName(data)}</div>
+                </div>
+                <span class="history-item-emotion">${d.icon}</span>
+                <div class="history-item-info">
+                    <div class="history-item-label">${d.label} · ${hora}</div>
+                    ${r.note ? `<div class="history-item-note">${Pluma.escapeHtml(r.note)}</div>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
-// Inicialização
-document.addEventListener('DOMContentLoaded', () => {
-    new HistoricoManager();
-    new RegistrosLista();
-});
+// ---------------------------------------------------------------- estados
+
+function mostrarVazio(vazio) {
+    const empty = document.getElementById('historyEmpty');
+    if (empty) empty.style.display = vazio ? '' : 'none';
+    document.querySelectorAll('.charts-section, .dominant-emotion, .history-list').forEach(el => {
+        el.style.display = vazio ? 'none' : '';
+    });
+}
+
+function mostrarErro(mensagem) {
+    const container = document.getElementById('historyItems');
+    if (container) {
+        container.innerHTML = `<p class="history-item-note">${Pluma.escapeHtml(mensagem)}</p>`;
+    }
+}

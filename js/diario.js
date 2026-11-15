@@ -1,82 +1,104 @@
 /**
  * PLUMA - Diário Emocional
- * Sistema de criação, edição e visualização de entradas do diário
+ * Criação, edição, busca e exclusão de entradas no back-end (/v1/diary). Precisa de login.
  */
 
+const api = window.VivaLeveAPI;
+
+let entradas = [];            // cache da última lista carregada do back
 let currentEntryId = null;
 let selectedEntryEmotion = null;
 let isEditing = false;
+let salvando = false;
 
 document.addEventListener('DOMContentLoaded', function() {
+    if (!api.exigirLogin()) return;
     initDiaryPage();
 });
 
 function initDiaryPage() {
-    // Carrega entradas
-    loadEntries();
-    
-    // Configura modal
     setupModal();
-    
-    // Configura busca
     setupSearch();
-    
-    // Configura botões
     setupButtons();
-    
-    // Configura seletor de emoção
     setupEmotionSelector();
+    loadEntries();
 }
 
 // ============================================
 // CARREGAR ENTRADAS
 // ============================================
 
-function loadEntries() {
-    const entries = Pluma.getDiaryEntries();
+async function loadEntries(query = '') {
     const container = document.getElementById('diaryEntries');
     const emptyState = document.getElementById('diaryEmpty');
-    
-    if (entries.length === 0) {
-        container.style.display = 'none';
-        emptyState.style.display = '';
-        return;
-    }
-    
+
     container.style.display = '';
     emptyState.style.display = 'none';
-    
-    container.innerHTML = entries.map(entry => createEntryCard(entry)).join('');
-    
-    // Adiciona event listeners
+    container.innerHTML = '<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Carregando...</p></div>';
+
+    try {
+        entradas = (await api.diario.listar(query.trim() || undefined)) || [];
+    } catch (e) {
+        if (api.tratarSemLogin(e)) return;
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-exclamation-circle"></i>
+                <p>${Pluma.escapeHtml(api.mensagemErro(e))}</p>
+            </div>
+        `;
+        return;
+    }
+
+    entradas.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    if (entradas.length === 0) {
+        if (query.trim()) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-search"></i>
+                    <p>Nenhuma entrada encontrada para "${Pluma.escapeHtml(query)}"</p>
+                </div>
+            `;
+        } else {
+            container.style.display = 'none';
+            emptyState.style.display = '';
+        }
+        return;
+    }
+
+    container.innerHTML = entradas.map(entry => createEntryCard(entry)).join('');
+
     container.querySelectorAll('.diary-entry').forEach(card => {
         card.addEventListener('click', function(e) {
             if (!e.target.closest('.entry-action')) {
-                viewEntry(parseInt(this.dataset.id));
+                viewEntry(Number(this.dataset.id));
             }
         });
     });
-    
     container.querySelectorAll('.entry-action.edit').forEach(btn => {
         btn.addEventListener('click', function(e) {
             e.stopPropagation();
-            editEntry(parseInt(this.closest('.diary-entry').dataset.id));
+            editEntry(Number(this.closest('.diary-entry').dataset.id));
         });
     });
-    
     container.querySelectorAll('.entry-action.delete').forEach(btn => {
         btn.addEventListener('click', function(e) {
             e.stopPropagation();
-            deleteEntry(parseInt(this.closest('.diary-entry').dataset.id));
+            deleteEntry(Number(this.closest('.diary-entry').dataset.id));
         });
     });
 }
 
+function dadosEmocao(entry) {
+    return entry.emotion
+        ? Pluma.getEmotionData(api.emocao.daApi(entry.emotion))
+        : { icon: '📝', label: '' };
+}
+
 function createEntryCard(entry) {
-    const emotionData = entry.emotion ? Pluma.getEmotionData(entry.emotion) : { icon: '📝' };
-    const date = new Date(entry.createdAt);
+    const emotionData = dadosEmocao(entry);
     const dayName = Pluma.getDayName(entry.createdAt);
-    
+
     return `
         <div class="diary-entry" data-id="${entry.id}">
             <div class="entry-header">
@@ -102,22 +124,22 @@ function createEntryCard(entry) {
     `;
 }
 
+function acharEntrada(id) {
+    return entradas.find(e => e.id === id);
+}
+
 // ============================================
 // VISUALIZAR ENTRADA
 // ============================================
 
 function viewEntry(id) {
-    const entries = Pluma.getDiaryEntries();
-    const entry = entries.find(e => e.id === id);
-    
+    const entry = acharEntrada(id);
     if (!entry) return;
-    
+
     currentEntryId = id;
-    
-    const emotionData = entry.emotion ? Pluma.getEmotionData(entry.emotion) : { icon: '📝', label: '' };
-    
-    const viewContent = document.getElementById('entryViewContent');
-    viewContent.innerHTML = `
+    const emotionData = dadosEmocao(entry);
+
+    document.getElementById('entryViewContent').innerHTML = `
         <div class="entry-view-meta">
             <span class="entry-view-emotion">${emotionData.icon}</span>
             <div>
@@ -128,8 +150,7 @@ function viewEntry(id) {
         <h2 class="entry-view-title">${Pluma.escapeHtml(entry.title)}</h2>
         <div class="entry-view-text">${Pluma.escapeHtml(entry.text)}</div>
     `;
-    
-    // Mostra visualização, esconde lista
+
     document.getElementById('diaryList').style.display = 'none';
     document.getElementById('entryView').classList.add('visible');
 }
@@ -146,47 +167,35 @@ function closeEntryView() {
 
 function setupModal() {
     const modal = document.getElementById('entryModal');
-    const closeBtn = document.getElementById('closeModal');
-    const cancelBtn = document.getElementById('cancelEntry');
-    const saveBtn = document.getElementById('saveEntry');
-    
-    closeBtn.addEventListener('click', closeModal);
-    cancelBtn.addEventListener('click', closeModal);
-    saveBtn.addEventListener('click', saveEntry);
-    
-    // Fecha ao clicar fora
+
+    document.getElementById('closeModal').addEventListener('click', closeModal);
+    document.getElementById('cancelEntry').addEventListener('click', closeModal);
+    document.getElementById('saveEntry').addEventListener('click', saveEntry);
+
     modal.addEventListener('click', function(e) {
-        if (e.target === modal) {
-            closeModal();
-        }
+        if (e.target === modal) closeModal();
     });
-    
-    // Fecha com ESC
+
     document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && modal.classList.contains('visible')) {
-            closeModal();
-        }
+        if (e.key === 'Escape' && modal.classList.contains('visible')) closeModal();
     });
 }
 
 function openModal(editMode = false) {
-    const modal = document.getElementById('entryModal');
-    const title = document.getElementById('modalTitle');
-    
     isEditing = editMode;
-    title.textContent = editMode ? 'Editar Entrada' : 'Nova Entrada';
-    
+    document.getElementById('modalTitle').textContent = editMode ? 'Editar Entrada' : 'Nova Entrada';
+
     if (!editMode) {
+        currentEntryId = null;
         clearForm();
     }
-    
-    modal.classList.add('visible');
+
+    document.getElementById('entryModal').classList.add('visible');
     document.getElementById('entryTitle').focus();
 }
 
 function closeModal() {
-    const modal = document.getElementById('entryModal');
-    modal.classList.remove('visible');
+    document.getElementById('entryModal').classList.remove('visible');
     clearForm();
 }
 
@@ -194,10 +203,7 @@ function clearForm() {
     document.getElementById('entryTitle').value = '';
     document.getElementById('entryText').value = '';
     selectedEntryEmotion = null;
-    
-    document.querySelectorAll('.emotion-option').forEach(opt => {
-        opt.classList.remove('selected');
-    });
+    document.querySelectorAll('.emotion-option').forEach(opt => opt.classList.remove('selected'));
 }
 
 // ============================================
@@ -206,12 +212,17 @@ function clearForm() {
 
 function setupEmotionSelector() {
     const options = document.querySelectorAll('.emotion-option');
-    
     options.forEach(option => {
         option.addEventListener('click', function() {
+            const jaSelecionada = this.classList.contains('selected');
             options.forEach(o => o.classList.remove('selected'));
-            this.classList.add('selected');
-            selectedEntryEmotion = this.dataset.emotion;
+            // clicar de novo na mesma emoção tira a seleção (a emoção é opcional)
+            if (jaSelecionada) {
+                selectedEntryEmotion = null;
+            } else {
+                this.classList.add('selected');
+                selectedEntryEmotion = this.dataset.emotion;
+            }
         });
     });
 }
@@ -220,39 +231,56 @@ function setupEmotionSelector() {
 // SALVAR ENTRADA
 // ============================================
 
-function saveEntry() {
+function setSalvando(ativo) {
+    salvando = ativo;
+    const btn = document.getElementById('saveEntry');
+    btn.disabled = ativo;
+    if (ativo) {
+        btn.dataset.textoOriginal = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+    } else if (btn.dataset.textoOriginal) {
+        btn.innerHTML = btn.dataset.textoOriginal;
+    }
+}
+
+async function saveEntry() {
+    if (salvando) return;
+
     const title = document.getElementById('entryTitle').value.trim();
     const text = document.getElementById('entryText').value.trim();
-    
+
     if (!title || !text) {
         alert('Por favor, preencha o título e o texto.');
         return;
     }
-    
-    const entryData = {
+
+    const dados = {
         title,
         text,
-        emotion: selectedEntryEmotion
+        emotion: api.emocao.paraApi(selectedEntryEmotion)
     };
-    
-    let success;
-    
-    if (isEditing && currentEntryId) {
-        success = Pluma.updateDiaryEntry(currentEntryId, entryData);
-    } else {
-        success = Pluma.saveDiaryEntry(entryData);
-    }
-    
-    if (success) {
-        closeModal();
-        loadEntries();
-        
-        if (document.getElementById('entryView').classList.contains('visible')) {
-            closeEntryView();
+
+    setSalvando(true);
+    try {
+        if (isEditing && currentEntryId) {
+            await api.diario.atualizar(currentEntryId, dados);
+        } else {
+            await api.diario.criar(dados);
         }
-    } else {
-        alert('Erro ao salvar. Tente novamente.');
+    } catch (e) {
+        if (api.tratarSemLogin(e)) return;
+        alert(api.mensagemErro(e, 'Erro ao salvar. Tente novamente.'));
+        return;
+    } finally {
+        setSalvando(false);
     }
+
+    closeModal();
+    if (document.getElementById('entryView').classList.contains('visible')) {
+        closeEntryView();
+    }
+    document.getElementById('searchInput').value = '';
+    loadEntries();
 }
 
 // ============================================
@@ -260,27 +288,20 @@ function saveEntry() {
 // ============================================
 
 function editEntry(id) {
-    const entries = Pluma.getDiaryEntries();
-    const entry = entries.find(e => e.id === id);
-    
+    const entry = acharEntrada(id);
     if (!entry) return;
-    
+
     currentEntryId = id;
-    
-    // Preenche formulário
     document.getElementById('entryTitle').value = entry.title;
     document.getElementById('entryText').value = entry.text;
-    
-    // Seleciona emoção
-    if (entry.emotion) {
-        selectedEntryEmotion = entry.emotion;
-        const option = document.querySelector(`.emotion-option[data-emotion="${entry.emotion}"]`);
-        if (option) {
-            document.querySelectorAll('.emotion-option').forEach(o => o.classList.remove('selected'));
-            option.classList.add('selected');
-        }
+
+    document.querySelectorAll('.emotion-option').forEach(o => o.classList.remove('selected'));
+    selectedEntryEmotion = entry.emotion ? api.emocao.daApi(entry.emotion) : null;
+    if (selectedEntryEmotion) {
+        const option = document.querySelector(`.emotion-option[data-emotion="${selectedEntryEmotion}"]`);
+        if (option) option.classList.add('selected');
     }
-    
+
     openModal(true);
 }
 
@@ -288,70 +309,35 @@ function editEntry(id) {
 // EXCLUIR ENTRADA
 // ============================================
 
-function deleteEntry(id) {
-    if (!confirm('Tem certeza que deseja excluir esta entrada?')) {
-        return;
-    }
-    
-    const success = Pluma.deleteDiaryEntry(id);
-    
-    if (success) {
-        loadEntries();
-        
-        if (document.getElementById('entryView').classList.contains('visible')) {
-            closeEntryView();
+async function deleteEntry(id) {
+    if (!confirm('Tem certeza que deseja excluir esta entrada?')) return;
+
+    try {
+        await api.diario.apagar(id);
+    } catch (e) {
+        if (api.tratarSemLogin(e)) return;
+        // 404: já não existe no back; segue e recarrega a lista
+        if (e.status !== 404) {
+            alert(api.mensagemErro(e, 'Erro ao excluir. Tente novamente.'));
+            return;
         }
-    } else {
-        alert('Erro ao excluir. Tente novamente.');
     }
+
+    if (document.getElementById('entryView').classList.contains('visible')) {
+        closeEntryView();
+    }
+    loadEntries(document.getElementById('searchInput').value);
 }
 
 // ============================================
-// BUSCA
+// BUSCA (feita no back: GET /v1/diary?q=)
 // ============================================
 
 function setupSearch() {
     const searchInput = document.getElementById('searchInput');
-    
     searchInput.addEventListener('input', Pluma.debounce(function() {
-        filterEntries(this.value);
-    }, 300));
-}
-
-function filterEntries(query) {
-    const entries = Pluma.getDiaryEntries();
-    const container = document.getElementById('diaryEntries');
-    
-    if (!query.trim()) {
-        loadEntries();
-        return;
-    }
-    
-    const filtered = entries.filter(entry => {
-        const searchText = `${entry.title} ${entry.text}`.toLowerCase();
-        return searchText.includes(query.toLowerCase());
-    });
-    
-    if (filtered.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-search"></i>
-                <p>Nenhuma entrada encontrada para "${Pluma.escapeHtml(query)}"</p>
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = filtered.map(entry => createEntryCard(entry)).join('');
-    
-    // Re-adiciona event listeners
-    container.querySelectorAll('.diary-entry').forEach(card => {
-        card.addEventListener('click', function(e) {
-            if (!e.target.closest('.entry-action')) {
-                viewEntry(parseInt(this.dataset.id));
-            }
-        });
-    });
+        loadEntries(searchInput.value);
+    }, 400));
 }
 
 // ============================================
@@ -359,28 +345,18 @@ function filterEntries(query) {
 // ============================================
 
 function setupButtons() {
-    // Botão nova entrada
     document.getElementById('newEntryBtn').addEventListener('click', () => openModal(false));
     document.getElementById('emptyNewEntryBtn')?.addEventListener('click', () => openModal(false));
-    
-    // Botão voltar
+
     document.getElementById('backBtn').addEventListener('click', closeEntryView);
-    
-    // Botão editar na visualização
+
     document.getElementById('editEntryBtn').addEventListener('click', () => {
-        if (currentEntryId) {
-            editEntry(currentEntryId);
-        }
+        if (currentEntryId) editEntry(currentEntryId);
     });
-    
-    // Botão excluir na visualização
     document.getElementById('deleteEntryBtn').addEventListener('click', () => {
-        if (currentEntryId) {
-            deleteEntry(currentEntryId);
-        }
+        if (currentEntryId) deleteEntry(currentEntryId);
     });
-    
-    // Botão filtro
+
     document.getElementById('filterBtn').addEventListener('click', () => {
         alert('Filtros avançados em desenvolvimento!');
     });
