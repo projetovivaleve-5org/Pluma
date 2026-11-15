@@ -2,7 +2,17 @@
  * VivaLeve / Pluma - Comunicação com a API (back-end Spring Boot)
  *
  * - Guarda o token (JWT) do login e manda "Authorization: Bearer <token>" em toda chamada.
- * - Funções prontas para login/cadastro (/v1/auth/*) e para a IA (/v1/ai/*).
+ * - Nunca manda userId: o back pega o usuário pelo token.
+ * - Módulos (window.VivaLeveAPI.*):
+ *     auth               /v1/auth/*                 login, cadastro, Google
+ *     usuarios           /v1/users/me               usuário logado
+ *     registros          /v1/entries                registros de humor (GREAT..AWFUL + atividades)
+ *     estatisticas       /v1/stats                  resumo, sequência, evolução e distribuição
+ *     humor              /v1/mood-logs              registro rápido de humor (OTIMO..ANSIOSO)
+ *     diario             /v1/diary                  diário
+ *     respiracao         /v1/breathing/*            sessões e estatísticas de respiração
+ *     historicoEmocional /api/history/*             gráficos do histórico emocional
+ *     ia                 /v1/ai/*                   chat da Pluma, insights e reflexões
  *
  * URL da API:
  *  - Abrindo o front em localhost / 127.0.0.1: http://localhost:8080
@@ -23,8 +33,9 @@
     // Para testar sem mexer no código: localStorage.setItem("pluma_google_client_id", "...")
     const GOOGLE_CLIENT_ID = "1085961204416-v75mbqjm8k2hhgrtapndf1lm1ame0qb1.apps.googleusercontent.com";
 
-    // O back espera até 30s pela IA; damos uma folga antes de desistir.
-    const TIMEOUT_MS = 45000;
+    // O Render grátis "dorme": a primeira chamada pode levar perto de 1 minuto para acordar o back.
+    // A IA ainda pode levar até 30s depois disso, então damos folga antes de desistir.
+    const TIMEOUT_MS = 70000;
 
     const KEYS = {
         API_URL: "pluma_api_url",
@@ -34,6 +45,15 @@
         USER_NAME: "pluma_user_name",
         LOGGED_IN: "pluma_logged_in",
         CONVERSA_PREFIXO: "pluma_chat_conversa_"
+    };
+
+    // Valores aceitos pelo back. ATENÇÃO: existem DOIS conjuntos de humor diferentes.
+    const ENUMS = {
+        // /v1/entries
+        HUMOR_REGISTRO: ["GREAT", "GOOD", "NEUTRAL", "BAD", "AWFUL"],
+        ATIVIDADES: ["EXERCISE", "WORK", "STUDY", "READING", "FAMILY", "FRIENDS", "HOBBY", "REST", "SLEEP_WELL", "MEDITATION"],
+        // /v1/mood-logs, /v1/diary (emotion) e /api/history
+        HUMOR: ["OTIMO", "BEM", "MAIS_OU_MENOS", "MAL", "DEPRESSIVO", "ANSIOSO"]
     };
 
     // ?api=... na URL troca a API (útil para testar local em outra porta)
@@ -58,6 +78,20 @@
         }
     }
 
+    /** Guarda o usuário no navegador e devolve o nome a exibir. */
+    function guardarUsuario(u) {
+        u = u || {};
+        const nome = u.name || (u.email ? u.email.split("@")[0] : "");
+        localStorage.setItem(KEYS.USER, JSON.stringify({
+            id: u.id,
+            email: u.email,
+            name: nome,
+            pictureUrl: u.pictureUrl || null
+        }));
+        localStorage.setItem(KEYS.USER_NAME, nome);
+        return nome;
+    }
+
     /** Apaga o token. Os botões "Sair" das páginas só tiram o pluma_logged_in, então token() também chama isto. */
     function limparToken() {
         localStorage.removeItem(KEYS.TOKEN);
@@ -80,17 +114,9 @@
 
     /** Salva a resposta de /v1/auth/login, /register ou /google: { token, tokenType, expiresAt, user }. */
     function salvarSessao(auth) {
-        const u = auth.user || {};
-        const nome = u.name || (u.email ? u.email.split("@")[0] : "");
         localStorage.setItem(KEYS.TOKEN, auth.token);
         if (auth.expiresAt) localStorage.setItem(KEYS.TOKEN_EXPIRES, auth.expiresAt);
-        localStorage.setItem(KEYS.USER, JSON.stringify({
-            id: u.id,
-            email: u.email,
-            name: nome,
-            pictureUrl: u.pictureUrl || null
-        }));
-        localStorage.setItem(KEYS.USER_NAME, nome);
+        guardarUsuario(auth.user);
         localStorage.setItem(KEYS.LOGGED_IN, "true");
     }
 
@@ -140,10 +166,49 @@
                 limparToken();
                 err.semLogin = true;
             }
+            // 404 também vale para registro/diário/conversa de OUTRO usuário (o back responde como se não existisse).
             console.error("[VivaLeve API]", endpoint, err.message);
             throw err;
         }
         return data;
+    }
+
+    // ------------------------------------------------------------ helpers
+
+    const http = {
+        get: (url) => request(url, { method: "GET" }),
+        post: (url, body) => request(url, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) }),
+        put: (url, body) => request(url, { method: "PUT", body: body === undefined ? undefined : JSON.stringify(body) }),
+        delete: (url) => request(url, { method: "DELETE" })
+    };
+
+    /** Monta "?a=1&b=2" ignorando valores vazios (undefined, null, ""). Já codifica caracteres especiais. */
+    function qs(params = {}) {
+        const p = new URLSearchParams();
+        Object.entries(params).forEach(([k, v]) => {
+            if (v !== undefined && v !== null && v !== "") p.append(k, v);
+        });
+        const s = p.toString();
+        return s ? "?" + s : "";
+    }
+
+    /** Data local no formato AAAA-MM-DD (toISOString usa UTC e pode virar o dia errado à noite no Brasil). */
+    function dataLocal(d = new Date()) {
+        const p = (n) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    }
+
+    /** Falha rápido, com mensagem clara, se o valor não for um dos aceitos pelo back. */
+    function exigirEnum(valor, lista, campo) {
+        if (!lista.includes(valor)) {
+            throw new Error(`${campo} inválido: "${valor}". Use um destes: ${lista.join(", ")}`);
+        }
+    }
+
+    function exigir(valor, campo) {
+        if (valor === undefined || valor === null || String(valor).trim() === "") {
+            throw new Error(`${campo} é obrigatório`);
+        }
     }
 
     // ------------------------------------------------------------ login (/v1/auth)
@@ -190,6 +255,181 @@
             limparToken();
             localStorage.removeItem(KEYS.LOGGED_IN);
             localStorage.removeItem(KEYS.USER);
+        }
+    };
+
+    // ------------------------------------------------------------ usuário (/v1/users)
+
+    const usuarios = {
+        /** Dados do usuário logado: { id, email, name, pictureUrl }. Também atualiza o cache local. */
+        async eu() {
+            const u = await http.get("/v1/users/me");
+            if (u) guardarUsuario(u);
+            return u;
+        }
+    };
+
+    // ------------------------------------------------------------ registros (/v1/entries)
+
+    const registros = {
+        /** Lista os registros do usuário: [{ id, mood, activities, note, date, createdAt, updatedAt }]. */
+        listar() {
+            return http.get("/v1/entries");
+        },
+
+        /**
+         * Cria um registro. mood: GREAT|GOOD|NEUTRAL|BAD|AWFUL (obrigatório).
+         * activities: lista de ENUMS.ATIVIDADES. date: "AAAA-MM-DD" (padrão: hoje).
+         */
+        criar({ mood, activities = [], note = null, date } = {}) {
+            exigirEnum(mood, ENUMS.HUMOR_REGISTRO, "mood");
+            activities.forEach((a) => exigirEnum(a, ENUMS.ATIVIDADES, "activities"));
+            return http.post("/v1/entries", { mood, activities, note, date: date || dataLocal() });
+        },
+
+        buscar(id) {
+            return http.get(`/v1/entries/${id}`);
+        },
+
+        /** Atualiza (PUT substitui tudo): mood e date são obrigatórios. */
+        atualizar(id, { mood, activities = [], note = null, date } = {}) {
+            exigirEnum(mood, ENUMS.HUMOR_REGISTRO, "mood");
+            activities.forEach((a) => exigirEnum(a, ENUMS.ATIVIDADES, "activities"));
+            exigir(date, "date (AAAA-MM-DD)");
+            return http.put(`/v1/entries/${id}`, { mood, activities, note, date });
+        },
+
+        apagar(id) {
+            return http.delete(`/v1/entries/${id}`);
+        }
+    };
+
+    // ------------------------------------------------------------ estatísticas (/v1/stats)
+
+    const estatisticas = {
+        /**
+         * Resumo dos últimos N dias: { days, startDate, endDate, totalEntries, predominantMood,
+         * currentStreak, longestStreak, evolution[], distribution[] }.
+         */
+        resumo(days) {
+            return http.get("/v1/stats" + qs({ days }));
+        }
+    };
+
+    // ------------------------------------------------------------ registro rápido de humor (/v1/mood-logs)
+
+    // ATENÇÃO: aqui mood e note vão na QUERY STRING (não no corpo JSON), e o mood é OTIMO|BEM|...
+    const humor = {
+        /** Lista paginada: { content[], totalPages, totalElements, number, size, first, last, empty... }. */
+        listar({ page = 0, size = 20, sort } = {}) {
+            return http.get("/v1/mood-logs" + qs({ page, size, sort }));
+        },
+
+        /** Todos os registros, sem paginar. */
+        todos() {
+            return http.get("/v1/mood-logs/all");
+        },
+
+        /** Registros de hoje (lista). */
+        hoje() {
+            return http.get("/v1/mood-logs/today");
+        },
+
+        criar(mood, note) {
+            exigirEnum(mood, ENUMS.HUMOR, "mood");
+            return http.post("/v1/mood-logs" + qs({ mood, note }));
+        },
+
+        atualizar(id, mood, note) {
+            exigirEnum(mood, ENUMS.HUMOR, "mood");
+            return http.put(`/v1/mood-logs/${id}` + qs({ mood, note }));
+        },
+
+        apagar(id) {
+            return http.delete(`/v1/mood-logs/${id}`);
+        }
+    };
+
+    // ------------------------------------------------------------ diário (/v1/diary)
+
+    const diario = {
+        /** Lista os textos do diário. q (opcional) filtra por busca. */
+        listar(q) {
+            return http.get("/v1/diary" + qs({ q }));
+        },
+
+        /** title e text obrigatórios; emotion opcional (ENUMS.HUMOR). */
+        criar({ title, text, emotion } = {}) {
+            exigir(title, "title");
+            exigir(text, "text");
+            if (emotion) exigirEnum(emotion, ENUMS.HUMOR, "emotion");
+            return http.post("/v1/diary", { title, text, emotion: emotion || null });
+        },
+
+        buscar(id) {
+            return http.get(`/v1/diary/${id}`);
+        },
+
+        atualizar(id, { title, text, emotion } = {}) {
+            exigir(title, "title");
+            exigir(text, "text");
+            if (emotion) exigirEnum(emotion, ENUMS.HUMOR, "emotion");
+            return http.put(`/v1/diary/${id}`, { title, text, emotion: emotion || null });
+        },
+
+        apagar(id) {
+            return http.delete(`/v1/diary/${id}`);
+        }
+    };
+
+    // ------------------------------------------------------------ respiração (/v1/breathing)
+
+    const respiracao = {
+        /** Sessões do usuário: [{ id, technique, cycles, durationSeconds, sessionDate, createdAt }]. */
+        sessoes() {
+            return http.get("/v1/breathing/sessions");
+        },
+
+        /** Registra uma sessão concluída. Todos os campos são obrigatórios. */
+        registrar({ technique, cycles, durationSeconds } = {}) {
+            exigir(technique, "technique");
+            exigir(cycles, "cycles");
+            exigir(durationSeconds, "durationSeconds");
+            return http.post("/v1/breathing/sessions", {
+                technique,
+                cycles: Number(cycles),
+                durationSeconds: Number(durationSeconds)
+            });
+        },
+
+        /** CUIDADO: o endpoint não recebe id, então apaga as sessões do usuário (peça confirmação na tela). */
+        apagarTodas() {
+            return http.delete("/v1/breathing/sessions");
+        },
+
+        /** { todaySessions, totalSessions, totalMinutes }. */
+        stats() {
+            return http.get("/v1/breathing/stats");
+        }
+    };
+
+    // ------------------------------------------------------------ histórico emocional (/api/history)
+    // ATENÇÃO: este grupo usa o prefixo /api, e não /v1.
+
+    const historicoEmocional = {
+        /** { items[], total, predominant, predominantPercentage } dos últimos N dias. */
+        distribuicao(days) {
+            return http.get("/api/history/distribution" + qs({ days }));
+        },
+
+        /** [{ date, averageScore, count }] dos últimos N dias (para o gráfico de linha). */
+        evolucao(days) {
+            return http.get("/api/history/evolution" + qs({ days }));
+        },
+
+        /** { totalRecords, currentStreak, bestStreak, breathingSessions }. */
+        resumo() {
+            return http.get("/api/history/summary");
         }
     };
 
@@ -261,9 +501,19 @@
             }
         },
 
-        /** Lista as conversas do usuário (mais recente primeiro). */
+        /** Lista as conversas do usuário (mais recente primeiro): [{ id, useCase, title, createdAt, lastMessageAt }]. */
         conversas() {
             return request("/v1/ai/conversations", { method: "GET" });
+        },
+
+        /** Mensagens de uma conversa específica (para uma tela de histórico de conversas). */
+        mensagens(conversationId) {
+            return http.get(`/v1/ai/conversations/${conversationId}/messages`);
+        },
+
+        /** Apaga uma conversa específica pelo id. */
+        apagarConversa(conversationId) {
+            return http.delete(`/v1/ai/conversations/${conversationId}`);
         },
 
         /** Texto curto sobre as estatísticas de humor de 7 ou 30 dias (usa os registros salvos no back). */
@@ -283,6 +533,8 @@
         }
     };
 
+    // ------------------------------------------------------------ API pública
+
     window.VivaLeveAPI = {
         get baseURL() {
             return baseUrl();
@@ -292,8 +544,17 @@
         },
         request,
         auth,
+        usuarios,
+        registros,
+        estatisticas,
+        humor,
+        diario,
+        respiracao,
+        historicoEmocional,
         ia,
         usuario,
+        ENUMS,
+        dataLocal,
 
         get(endpoint) {
             return request(endpoint, { method: "GET" });
