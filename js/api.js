@@ -13,8 +13,8 @@
  */
 
 (function () {
-    // TODO: confirmar a URL pública do back-end (Render) antes do deploy.
-    const PRODUCAO_URL = "https://back-endvivaleve-cpjz8ngd8-projeto-viva-leve.vercel.app";
+    // URL pública do back-end (Render).
+    const PRODUCAO_URL = "https://back-end-vivaleve.onrender.com";
     const LOCAL_URL = "http://localhost:8080";
 
     // Client ID "Web application" do Google Cloud Console: o MESMO valor do GOOGLE_CLIENT_ID do back-end.
