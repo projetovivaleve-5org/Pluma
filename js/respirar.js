@@ -5,36 +5,25 @@
 
 (function () {
     const FASES = [
-        { id: 'inhale', texto: 'Inspire', label: 'Inspire pelo nariz', desc: 'Encha os pulmões devagar', dur: 3, freq: 392 },
-        { id: 'hold',   texto: 'Segure',  label: 'Segure o ar',        desc: 'Mantenha o ar com calma',  dur: 4, freq: 440 },
-        { id: 'exhale', texto: 'Expire',  label: 'Expire pela boca',   desc: 'Solte o ar lentamente',    dur: 5, freq: 330 }
+        { id: 'inhale', texto: 'Inspire', label: 'Inspire pelo nariz', desc: 'Encha os pulmões devagar', dur: 3 },
+        { id: 'hold',   texto: 'Segure',  label: 'Segure o ar',        desc: 'Mantenha o ar com calma',  dur: 4 },
+        { id: 'exhale', texto: 'Expire',  label: 'Expire pela boca',   desc: 'Solte o ar lentamente',    dur: 5 }
     ];
     const CICLOS = 5;
     const SEGUNDOS_CICLO = FASES.reduce((t, f) => t + f.dur, 0); // 12
     const CIRCUNFERENCIA = 817;
     const KEY_SESSOES = 'pluma_respiracao_sessoes';
-    const KEY_SOM = 'pluma_respiracao_som';
 
     const $ = (id) => document.getElementById(id);
 
     let rodando = false;
     let token = 0;
-    let audioCtx = null;
 
     document.addEventListener('DOMContentLoaded', () => {
         const startBtn = $('startBtn');
         if (!startBtn) return;
 
         const resetBtn = $('resetBtn');
-        const somToggle = $('soundToggle');
-
-        // O botão de som saiu do respirar.html; só liga o som se ele voltar à página.
-        if (somToggle) {
-            somToggle.checked = localStorage.getItem(KEY_SOM) === 'true';
-            somToggle.addEventListener('change', () => {
-                localStorage.setItem(KEY_SOM, somToggle.checked);
-            });
-        }
 
         startBtn.addEventListener('click', () => (rodando ? parar() : iniciar()));
         resetBtn.addEventListener('click', () => { parar(); iniciar(); });
@@ -100,8 +89,6 @@
             anel.style.transition = `stroke-dashoffset ${fase.dur}s linear`;
             anel.style.strokeDashoffset = CIRCUNFERENCIA * (1 - decorridoFim / SEGUNDOS_CICLO);
 
-            tocar(fase.freq);
-
             let restante = fase.dur;
             $('breathingTimer').textContent = restante;
             const intervalo = setInterval(() => {
@@ -142,25 +129,6 @@
         anel.style.transition = 'none';
         anel.style.strokeDashoffset = CIRCUNFERENCIA;
         void anel.getBoundingClientRect(); // força reflow antes da próxima transição
-    }
-
-    // ---------- Som ----------
-    function tocar(freq) {
-        const somToggle = $('soundToggle');
-        if (!somToggle || !somToggle.checked) return;
-        try {
-            audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = 'sine';
-            osc.frequency.value = freq;
-            gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.12, audioCtx.currentTime + 0.1);
-            gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1.2);
-            osc.connect(gain).connect(audioCtx.destination);
-            osc.start();
-            osc.stop(audioCtx.currentTime + 1.3);
-        } catch (e) { /* som é opcional */ }
     }
 
     // ---------- Sessões ----------
