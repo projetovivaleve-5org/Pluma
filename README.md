@@ -10,7 +10,7 @@ https://pluma-7xdk9q5b0-igorrmouras-projects.vercel.app
 
 PROJETO FUNCIONANDO EM:
 
-https://front-endvivaleve.vercel.app/
+https://projetopluma.vercel.app/
 
 ---
 
