@@ -187,9 +187,6 @@
     color: #DB4437;
 }
 
-.social-btn.apple i {
-    color: #000000;
-}
 
 /* Link de Cadastro */
 .register-link {
@@ -228,6 +225,13 @@
 
 .password-toggle:hover {
     color: var(--verde-escuro);
+}
+
+/* o ícone do olho não segue a regra ".input-icon-wrapper i" (ícone à esquerda) */
+.input-icon-wrapper .password-toggle i {
+    position: static;
+    transform: none;
+    color: inherit;
 }
 
 /* Erro de Validação */
