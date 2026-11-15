@@ -28,10 +28,13 @@
         const resetBtn = $('resetBtn');
         const somToggle = $('soundToggle');
 
-        somToggle.checked = localStorage.getItem(KEY_SOM) === 'true';
-        somToggle.addEventListener('change', () => {
-            localStorage.setItem(KEY_SOM, somToggle.checked);
-        });
+        // O botão de som saiu do respirar.html; só liga o som se ele voltar à página.
+        if (somToggle) {
+            somToggle.checked = localStorage.getItem(KEY_SOM) === 'true';
+            somToggle.addEventListener('change', () => {
+                localStorage.setItem(KEY_SOM, somToggle.checked);
+            });
+        }
 
         startBtn.addEventListener('click', () => (rodando ? parar() : iniciar()));
         resetBtn.addEventListener('click', () => { parar(); iniciar(); });
@@ -143,7 +146,8 @@
 
     // ---------- Som ----------
     function tocar(freq) {
-        if (!$('soundToggle').checked) return;
+        const somToggle = $('soundToggle');
+        if (!somToggle || !somToggle.checked) return;
         try {
             audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
             const osc = audioCtx.createOscillator();
