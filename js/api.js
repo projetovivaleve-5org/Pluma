@@ -318,7 +318,15 @@
 
     // ------------------------------------------------------------ registro rápido de humor (/v1/mood-logs)
 
-    // ATENÇÃO: aqui mood e note vão na QUERY STRING (não no corpo JSON), e o mood é OTIMO|BEM|...
+    // ATENÇÃO: no POST/PUT o back só aceita multipart/form-data (o campo opcional "image" é um arquivo),
+    // então mood e note vão num FormData, e não em JSON. O mood é OTIMO|BEM|... (não GREAT|GOOD).
+    function formHumor(mood, note) {
+        const form = new FormData();
+        form.append("mood", mood);
+        if (note) form.append("note", note);
+        return form;
+    }
+
     const humor = {
         /** Lista paginada: { content[], totalPages, totalElements, number, size, first, last, empty... }. */
         listar({ page = 0, size = 20, sort } = {}) {
@@ -337,12 +345,12 @@
 
         criar(mood, note) {
             exigirEnum(mood, ENUMS.HUMOR, "mood");
-            return http.post("/v1/mood-logs" + qs({ mood, note }));
+            return request("/v1/mood-logs", { method: "POST", body: formHumor(mood, note) });
         },
 
         atualizar(id, mood, note) {
             exigirEnum(mood, ENUMS.HUMOR, "mood");
-            return http.put(`/v1/mood-logs/${id}` + qs({ mood, note }));
+            return request(`/v1/mood-logs/${id}`, { method: "PUT", body: formHumor(mood, note) });
         },
 
         apagar(id) {
@@ -533,6 +541,74 @@
         }
     };
 
+    // ------------------------------------------------------------ ajudas para as telas
+
+    /**
+     * As telas usam ids em minúsculo com hífen ("mais-ou-menos"); o back usa OTIMO, MAIS_OU_MENOS...
+     * paraApi("mais-ou-menos") -> "MAIS_OU_MENOS" · daApi("MAIS_OU_MENOS") -> "mais-ou-menos"
+     */
+    const emocao = {
+        paraApi(id) {
+            return id ? String(id).toUpperCase().replace(/-/g, "_") : null;
+        },
+        daApi(valor) {
+            return valor ? String(valor).toLowerCase().replace(/_/g, "-") : null;
+        }
+    };
+
+    /**
+     * Humor da tela (6 opções) -> humor do /v1/entries (5 opções), usado pela IA e pelas estatísticas.
+     * "ansioso" não existe no /v1/entries: vira BAD.
+     */
+    const HUMOR_PARA_REGISTRO = {
+        "otimo": "GREAT",
+        "bem": "GOOD",
+        "mais-ou-menos": "NEUTRAL",
+        "mal": "BAD",
+        "depressivo": "AWFUL",
+        "ansioso": "BAD"
+    };
+
+    /** Atividades da tela (data-activity) -> ENUMS.ATIVIDADES. */
+    const ATIVIDADE_PARA_API = {
+        "trabalho": "WORK",
+        "exercicio": "EXERCISE",
+        "familia": "FAMILY",
+        "amigos": "FRIENDS",
+        "hobby": "HOBBY",
+        "descanso": "REST",
+        "estudo": "STUDY",
+        "meditacao": "MEDITATION",
+        "leitura": "READING",
+        "sono": "SLEEP_WELL"
+    };
+
+    /** Manda para o login se não houver token válido. Use no começo de cada tela protegida. */
+    function exigirLogin() {
+        if (token() === null) {
+            window.location.href = "login.html";
+            return false;
+        }
+        return true;
+    }
+
+    /** Mensagem amigável para mostrar na tela a partir de um erro do request(). */
+    function mensagemErro(e, padrao = "Não foi possível falar com o servidor. Tente de novo.") {
+        if (!e) return padrao;
+        if (e.semLogin) return "Sua sessão expirou. Entre de novo.";
+        if (e.offline) return "O servidor não respondeu. Ele pode estar acordando: tente de novo em alguns segundos.";
+        return e.message || padrao;
+    }
+
+    /** Se o erro for de sessão (401), leva para o login. Devolve true quando redirecionou. */
+    function tratarSemLogin(e) {
+        if (e && e.semLogin) {
+            window.location.href = "login.html";
+            return true;
+        }
+        return false;
+    }
+
     // ------------------------------------------------------------ API pública
 
     window.VivaLeveAPI = {
@@ -555,6 +631,12 @@
         usuario,
         ENUMS,
         dataLocal,
+        emocao,
+        HUMOR_PARA_REGISTRO,
+        ATIVIDADE_PARA_API,
+        exigirLogin,
+        mensagemErro,
+        tratarSemLogin,
 
         get(endpoint) {
             return request(endpoint, { method: "GET" });

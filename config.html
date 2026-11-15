@@ -229,73 +229,86 @@
     </main>
 
     <!-- Scripts -->
+    <script src="js/api.js?v=5"></script>
     <script src="js/app.js"></script>
     <script src="js/sons.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            var api = window.VivaLeveAPI;
+            if (!api.exigirLogin()) return;
+
             // Dark Mode Toggle
-            const darkModeToggle = document.getElementById('darkModeToggle');
+            var darkModeToggle = document.getElementById('darkModeToggle');
             if (darkModeToggle) {
                 darkModeToggle.checked = document.documentElement.getAttribute('data-theme') === 'dark';
                 darkModeToggle.addEventListener('change', function() {
-                    const theme = this.checked ? 'dark' : 'light';
+                    var theme = this.checked ? 'dark' : 'light';
                     document.documentElement.setAttribute('data-theme', theme);
                     localStorage.setItem('pluma_theme', theme);
                 });
             }
 
-            // Notificações Toggle
-            const notificationsToggle = document.getElementById('notificationsToggle');
-            if (notificationsToggle) {
-                notificationsToggle.checked = localStorage.getItem('pluma_notifications') !== 'false';
-                notificationsToggle.addEventListener('change', function() {
-                    localStorage.setItem('pluma_notifications', this.checked);
-                });
+            // Conta: mostra o que está no navegador e atualiza com o back (/v1/users/me)
+            function mostrarUsuario(user) {
+                user = user || {};
+                var emailEl = document.getElementById('userEmail');
+                if (emailEl && user.email) {
+                    emailEl.textContent = user.name ? user.name + ' · ' + user.email : user.email;
+                }
+                var sideEl = document.getElementById('sideUserName');
+                if (sideEl && user.name) sideEl.textContent = user.name;
             }
+            mostrarUsuario(api.usuario());
+            api.usuarios.eu().then(mostrarUsuario).catch(function(e) { api.tratarSemLogin(e); });
 
-            // Carregar dados e email do usuário
-            const user = JSON.parse(localStorage.getItem('pluma_user') || '{}');
-            if (user.email) {
-                const userEmailEl = document.getElementById('userEmail');
-                if (userEmailEl) userEmailEl.textContent = user.email;
-            }
-            if (user.name) {
-                const sideUserNameEl = document.getElementById('sideUserName');
-                if (sideUserNameEl) sideUserNameEl.textContent = user.name;
-            }
-
-            // Exportar dados
-            const exportDataBtn = document.getElementById('exportData');
-            if (exportDataBtn) {
-                exportDataBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const data = {
-                        moods: JSON.parse(localStorage.getItem('pluma_moods') || '[]'),
-                        diary: JSON.parse(localStorage.getItem('pluma_diary') || '[]'),
-                        breathing: JSON.parse(localStorage.getItem('pluma_breathing') || '{}')
-                    };
-                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'pluma_dados_' + new Date().toISOString().split('T')[0] + '.json';
-                    a.click();
-                    URL.revokeObjectURL(url);
-                    alert('Dados exportados com sucesso!');
-                });
-            }
-
-            // Limpar dados
-            const clearDataBtn = document.getElementById('clearData');
+            // Limpar dados: apaga no back TODOS os registros da conta (a conta continua existindo)
+            var clearDataBtn = document.getElementById('clearData');
             if (clearDataBtn) {
-                clearDataBtn.addEventListener('click', function(e) {
+                clearDataBtn.addEventListener('click', async function(e) {
                     e.preventDefault();
-                    if (confirm('Tem certeza que deseja apagar todos os seus dados? Esta ação não pode ser desfeita.')) {
-                        localStorage.removeItem('pluma_moods');
-                        localStorage.removeItem('pluma_diary');
-                        localStorage.removeItem('pluma_breathing');
-                        alert('Dados apagados com sucesso!');
-                        location.reload();
+                    if (!confirm('Apagar TODOS os seus registros de humor, diário, respiração e conversas com a Pluma? Esta ação não pode ser desfeita.')) return;
+                    if (!confirm('Última confirmação: apagar tudo mesmo?')) return;
+
+                    var titulo = clearDataBtn.querySelector('.useful-link-title');
+                    var textoOriginal = titulo ? titulo.textContent : '';
+                    if (titulo) titulo.textContent = 'Apagando...';
+
+                    try {
+                        var dados = await Promise.all([
+                            api.humor.todos(),
+                            api.registros.listar(),
+                            api.diario.listar(),
+                            api.ia.conversas()
+                        ]);
+                        var apagar = []
+                            .concat((dados[0] || []).map(function(r) { return function() { return api.humor.apagar(r.id); }; }))
+                            .concat((dados[1] || []).map(function(r) { return function() { return api.registros.apagar(r.id); }; }))
+                            .concat((dados[2] || []).map(function(r) { return function() { return api.diario.apagar(r.id); }; }))
+                            .concat((dados[3] || []).map(function(r) { return function() { return api.ia.apagarConversa(r.id); }; }))
+                            .concat([function() { return api.respiracao.apagarTodas(); }]);
+
+                        // um de cada vez, para não sobrecarregar o servidor grátis
+                        for (var i = 0; i < apagar.length; i++) {
+                            try {
+                                await apagar[i]();
+                            } catch (err) {
+                                if (err.status !== 404) throw err;
+                            }
+                        }
+                        // limpa também o que ficou guardado no navegador
+                        ['pluma_moods', 'pluma_diary', 'pluma_breathing', 'pluma_respiracao_sessoes'].forEach(function(k) {
+                            localStorage.removeItem(k);
+                        });
+                        Object.keys(localStorage)
+                            .filter(function(k) { return k.indexOf('pluma_chat_conversa_') === 0; })
+                            .forEach(function(k) { localStorage.removeItem(k); });
+
+                        alert('Seus registros foram apagados.');
+                    } catch (err) {
+                        if (api.tratarSemLogin(err)) return;
+                        alert('Não foi possível apagar tudo: ' + api.mensagemErro(err));
+                    } finally {
+                        if (titulo) titulo.textContent = textoOriginal;
                     }
                 });
             }

@@ -258,9 +258,13 @@
 
 
     <!-- Scripts -->
+    <script src="js/api.js?v=5"></script>
     <script src="js/app.js"></script>
     <script src="js/sons.js"></script>
     <script>
+        // Token vencido ou ausente: volta para o login (o teste no <head> só olha o pluma_logged_in)
+        window.VivaLeveAPI.exigirLogin();
+
         // Nome do usuário no rodapé do menu
         document.addEventListener('DOMContentLoaded', function () {
             try {

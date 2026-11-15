@@ -1,36 +1,27 @@
 /**
  * PLUMA - Registro de Humor
- * Permite ao usuário registrar seu estado emocional diário
+ * Salva no back-end (precisa de login):
+ *  - /v1/mood-logs: emoção da tela (OTIMO..ANSIOSO) + nota. Alimenta o Histórico. Limite: 3 por dia.
+ *  - /v1/entries: o mesmo registro com as atividades. Alimenta a IA (insights) e as estatísticas.
  */
+
+const api = window.VivaLeveAPI;
 
 let selectedEmotion = null;
 let selectedActivities = [];
-let uploadedImage = null;
+let salvando = false;
 
 document.addEventListener('DOMContentLoaded', function() {
+    if (!api.exigirLogin()) return;
     initHumorPage();
 });
 
 function initHumorPage() {
-    // Configura data atual
     setCurrentDate();
-    
-    // Configura grid de emoções
     setupEmotionsGrid();
-    
-    // Configura área de atividades
     setupActivities();
-    
-    // Configura upload de imagem
-    setupImageUpload();
-    
-    // Configura contador de caracteres
     setupCharCounter();
-    
-    // Configura botão de salvar
     setupSaveButton();
-    
-    // Carrega histórico rápido
     loadQuickHistory();
 }
 
@@ -53,14 +44,12 @@ function setCurrentDate() {
 
 function setupEmotionsGrid() {
     const emotionsGrid = document.getElementById('emotionsGrid');
-    const emotionCards = emotionsGrid.querySelectorAll('.emotion-card');
-    
-    emotionCards.forEach(card => {
+    if (!emotionsGrid) return;
+
+    emotionsGrid.querySelectorAll('.emotion-card').forEach(card => {
         card.addEventListener('click', function() {
             selectEmotion(this);
         });
-        
-        // Suporte a teclado
         card.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
@@ -71,24 +60,16 @@ function setupEmotionsGrid() {
 }
 
 function selectEmotion(card) {
-    const emotion = card.dataset.emotion;
-    
-    // Remove seleção anterior
     document.querySelectorAll('.emotion-card').forEach(c => {
         c.classList.remove('selected');
         c.setAttribute('aria-pressed', 'false');
     });
-    
-    // Adiciona seleção
+
     card.classList.add('selected');
     card.setAttribute('aria-pressed', 'true');
-    
-    selectedEmotion = emotion;
-    
-    // Habilita botão de salvar
+    selectedEmotion = card.dataset.emotion;
     updateSaveButton();
-    
-    // Adiciona feedback visual
+
     card.style.transform = 'scale(1.05)';
     setTimeout(() => {
         card.style.transform = '';
@@ -101,9 +82,9 @@ function selectEmotion(card) {
 
 function setupActivities() {
     const activitiesGrid = document.getElementById('activitiesGrid');
-    const activityTags = activitiesGrid.querySelectorAll('.activity-tag');
-    
-    activityTags.forEach(tag => {
+    if (!activitiesGrid) return;
+
+    activitiesGrid.querySelectorAll('.activity-tag').forEach(tag => {
         tag.addEventListener('click', function() {
             toggleActivity(this);
         });
@@ -112,7 +93,7 @@ function setupActivities() {
 
 function toggleActivity(tag) {
     const activity = tag.dataset.activity;
-    
+
     if (tag.classList.contains('selected')) {
         tag.classList.remove('selected');
         selectedActivities = selectedActivities.filter(a => a !== activity);
@@ -123,219 +104,149 @@ function toggleActivity(tag) {
 }
 
 // ============================================
-// UPLOAD DE IMAGEM
-// ============================================
-
-function setupImageUpload() {
-    const uploadArea = document.getElementById('uploadArea');
-    const imageInput = document.getElementById('imageUpload');
-    const preview = document.getElementById('uploadPreview');
-    const previewImage = document.getElementById('previewImage');
-    const removeBtn = document.getElementById('removeImage');
-    
-    // Click para upload
-    uploadArea.addEventListener('click', () => imageInput.click());
-    
-    // Drag and drop
-    uploadArea.addEventListener('dragover', function(e) {
-        e.preventDefault();
-        this.classList.add('dragover');
-    });
-    
-    uploadArea.addEventListener('dragleave', function() {
-        this.classList.remove('dragover');
-    });
-    
-    uploadArea.addEventListener('drop', function(e) {
-        e.preventDefault();
-        this.classList.remove('dragover');
-        
-        const file = e.dataTransfer.files[0];
-        if (file && file.type.startsWith('image/')) {
-            handleImageUpload(file);
-        }
-    });
-    
-    // Input change
-    imageInput.addEventListener('change', function() {
-        if (this.files[0]) {
-            handleImageUpload(this.files[0]);
-        }
-    });
-    
-    // Remover imagem
-    removeBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        removeImage();
-    });
-}
-
-function handleImageUpload(file) {
-    // Verifica tamanho (máx 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-        alert('A imagem deve ter no máximo 5MB');
-        return;
-    }
-    
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        uploadedImage = e.target.result;
-        
-        const previewImage = document.getElementById('previewImage');
-        const preview = document.getElementById('uploadPreview');
-        const uploadArea = document.getElementById('uploadArea');
-        
-        previewImage.src = uploadedImage;
-        preview.classList.add('visible');
-        uploadArea.style.display = 'none';
-    };
-    reader.readAsDataURL(file);
-}
-
-function removeImage() {
-    uploadedImage = null;
-    
-    const preview = document.getElementById('uploadPreview');
-    const uploadArea = document.getElementById('uploadArea');
-    const imageInput = document.getElementById('imageUpload');
-    
-    preview.classList.remove('visible');
-    uploadArea.style.display = '';
-    imageInput.value = '';
-}
-
-// ============================================
 // CONTADOR DE CARACTERES
 // ============================================
 
 function setupCharCounter() {
     const noteTextarea = document.getElementById('moodNote');
     const charCount = document.getElementById('noteCharCount');
-    
+    if (!noteTextarea || !charCount) return;
+
     noteTextarea.addEventListener('input', function() {
         charCount.textContent = this.value.length;
     });
 }
 
 // ============================================
-// BOTÃO DE SALVAR
+// SALVAR
 // ============================================
 
 function setupSaveButton() {
-    const saveBtn = document.getElementById('saveBtn');
-    
-    saveBtn.addEventListener('click', saveMoodRecord);
+    document.getElementById('saveBtn').addEventListener('click', saveMoodRecord);
 }
 
 function updateSaveButton() {
-    const saveBtn = document.getElementById('saveBtn');
-    saveBtn.disabled = !selectedEmotion;
+    document.getElementById('saveBtn').disabled = !selectedEmotion || salvando;
 }
 
-function saveMoodRecord() {
-    if (!selectedEmotion) return;
-    
+function setSalvando(ativo) {
+    salvando = ativo;
+    const saveBtn = document.getElementById('saveBtn');
+    saveBtn.innerHTML = ativo
+        ? '<i class="fas fa-spinner fa-spin"></i> Salvando...'
+        : '<i class="fas fa-save"></i> Salvar Registro';
+    updateSaveButton();
+}
+
+async function saveMoodRecord() {
+    if (!selectedEmotion || salvando) return;
+
     const note = document.getElementById('moodNote').value.trim();
-    
-    const moodData = {
-        emotion: selectedEmotion,
-        note: note,
-        activities: selectedActivities,
-        image: uploadedImage
-    };
-    
-    // Salva no storage
-    const success = Pluma.saveMood(moodData);
-    
-    if (success) {
+    setSalvando(true);
+
+    try {
+        // 1) Registro de humor (Histórico). Se falhar (ex.: limite de 3 por dia), nada é salvo.
+        await api.humor.criar(api.emocao.paraApi(selectedEmotion), note || null);
+
+        // 2) Mesmo registro com as atividades, para a IA e as estatísticas. Não bloqueia se falhar.
+        const atividades = selectedActivities
+            .map(a => api.ATIVIDADE_PARA_API[a])
+            .filter(Boolean);
+        try {
+            await api.registros.criar({
+                mood: api.HUMOR_PARA_REGISTRO[selectedEmotion] || 'NEUTRAL',
+                activities: atividades,
+                note: note || null
+            });
+        } catch (e) {
+            if (api.tratarSemLogin(e)) return;
+            console.warn('[Pluma] Registro salvo no histórico, mas não nas estatísticas da IA:', e.message);
+        }
+
         showSaveConfirmation();
-    } else {
-        alert('Erro ao salvar. Tente novamente.');
+    } catch (e) {
+        if (api.tratarSemLogin(e)) return;
+        alert(api.mensagemErro(e, 'Erro ao salvar. Tente novamente.'));
+    } finally {
+        setSalvando(false);
     }
 }
 
 function showSaveConfirmation() {
-    // Esconde formulário
     document.querySelector('.humor-question').style.display = 'none';
     document.getElementById('emotionsGrid').style.display = 'none';
     document.querySelectorAll('.card').forEach(c => c.style.display = 'none');
     document.querySelector('.save-section').style.display = 'none';
-    
-    // Mostra confirmação
-    const confirmation = document.getElementById('saveConfirmation');
-    confirmation.classList.add('visible');
-    
-    // Atualiza histórico rápido
-    setTimeout(() => {
-        loadQuickHistory();
-    }, 500);
-    
-    // Reset após alguns segundos (opcional - pode deixar na tela de confirmação)
+
+    document.getElementById('saveConfirmation').classList.add('visible');
+
+    loadQuickHistory();
+
     setTimeout(() => {
         resetForm();
     }, 3000);
 }
 
 function resetForm() {
-    // Reset variáveis
     selectedEmotion = null;
     selectedActivities = [];
-    uploadedImage = null;
-    
-    // Reset UI
+
     document.querySelectorAll('.emotion-card').forEach(c => {
         c.classList.remove('selected');
         c.setAttribute('aria-pressed', 'false');
     });
-    
     document.querySelectorAll('.activity-tag').forEach(t => {
         t.classList.remove('selected');
     });
-    
+
     document.getElementById('moodNote').value = '';
-    document.getElementById('noteCharCount').textContent = '0';
-    
-    removeImage();
-    
-    // Mostra formulário novamente
+    const charCount = document.getElementById('noteCharCount');
+    if (charCount) charCount.textContent = '0';
+
     document.querySelector('.humor-question').style.display = '';
     document.getElementById('emotionsGrid').style.display = '';
     document.querySelectorAll('.card').forEach(c => c.style.display = '');
     document.querySelector('.save-section').style.display = '';
-    
-    // Esconde confirmação
+
     document.getElementById('saveConfirmation').classList.remove('visible');
-    
-    // Desabilita botão
     updateSaveButton();
 }
 
 // ============================================
-// HISTÓRICO RÁPIDO
+// HISTÓRICO RÁPIDO (últimos 7 registros do back)
 // ============================================
 
-function loadQuickHistory() {
+async function loadQuickHistory() {
     const container = document.getElementById('quickHistoryItems');
     const section = document.getElementById('quickHistory');
-    
-    const moods = Pluma.getMoods();
-    
-    if (moods.length === 0) {
+    if (!container || !section) return;
+
+    let registros;
+    try {
+        registros = await api.humor.todos();
+    } catch (e) {
+        if (api.tratarSemLogin(e)) return;
         section.style.display = 'none';
         return;
     }
-    
+
+    if (!registros || registros.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+
     section.style.display = '';
-    
-    // Pega últimos 7 registros
-    const recentMoods = moods.slice(-7).reverse();
-    
-    container.innerHTML = recentMoods.map(mood => {
-        const emotionData = Pluma.getEmotionData(mood.emotion);
-        const date = new Date(mood.createdAt);
-        
+
+    const recentes = registros
+        .slice()
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 7);
+
+    container.innerHTML = recentes.map(r => {
+        const emotionData = Pluma.getEmotionData(api.emocao.daApi(r.mood));
+        const date = new Date(r.createdAt || r.logDate);
         return `
-            <div class="quick-history-item">
+            <div class="quick-history-item" title="${Pluma.escapeHtml(emotionData.label)}">
                 <span class="emotion-icon">${emotionData.icon}</span>
                 <span class="date">${date.getDate()}/${date.getMonth() + 1}</span>
             </div>
