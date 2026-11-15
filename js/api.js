@@ -19,7 +19,7 @@
 
     // Client ID "Web application" do Google Cloud Console: o MESMO valor do GOOGLE_CLIENT_ID do back-end.
     // Não é segredo (vai no HTML de qualquer site com login Google). Em "Authorized JavaScript origins"
-    // do Console precisam estar as URLs do front (ex.: https://front-endvivaleve.vercel.app e http://localhost:5500).
+    // do Console precisam estar as URLs do front (ex.: https://projetopluma.vercel.app e http://localhost:5500).
     // Para testar sem mexer no código: localStorage.setItem("pluma_google_client_id", "...")
     const GOOGLE_CLIENT_ID = "1085961204416-v75mbqjm8k2hhgrtapndf1lm1ame0qb1.apps.googleusercontent.com";
 
