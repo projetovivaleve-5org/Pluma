@@ -229,7 +229,7 @@
     </main>
 
     <!-- Scripts -->
-    <script src="js/api.js?v=5"></script>
+    <script src="js/api.js?v=6"></script>
     <script src="js/app.js"></script>
     <script src="js/sons.js"></script>
     <script>
@@ -276,15 +276,13 @@
                     try {
                         var dados = await Promise.all([
                             api.humor.todos(),
-                            api.registros.listar(),
                             api.diario.listar(),
                             api.ia.conversas()
                         ]);
                         var apagar = []
                             .concat((dados[0] || []).map(function(r) { return function() { return api.humor.apagar(r.id); }; }))
-                            .concat((dados[1] || []).map(function(r) { return function() { return api.registros.apagar(r.id); }; }))
-                            .concat((dados[2] || []).map(function(r) { return function() { return api.diario.apagar(r.id); }; }))
-                            .concat((dados[3] || []).map(function(r) { return function() { return api.ia.apagarConversa(r.id); }; }))
+                            .concat((dados[1] || []).map(function(r) { return function() { return api.diario.apagar(r.id); }; }))
+                            .concat((dados[2] || []).map(function(r) { return function() { return api.ia.apagarConversa(r.id); }; }))
                             .concat([function() { return api.respiracao.apagarTodas(); }]);
 
                         // um de cada vez, para não sobrecarregar o servidor grátis
