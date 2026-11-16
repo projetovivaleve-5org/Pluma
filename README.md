@@ -35,16 +35,16 @@ O nome diz tudo: **leve como uma pluma**.
 
 ##  Funcionalidades
 
-| | Funcionalidade | O que faz |
-|---|---|---|
-| 😊 | **Registro de humor** | Registra como você está se sentindo hoje, de forma rápida. |
-| 📖 | **Diário** | Espaço livre para escrever pensamentos e reflexões. |
-| 📈 | **Histórico** | Reúne seus registros para você acompanhar a evolução. |
-| 🌬️ | **Respirar** | Exercício de respiração guiada no padrão **3-4-5**. |
-| 💬 | **Conversar** | Tela para conversar com a Pluma. |
-| 🎧 | **Sons relaxantes** | Sons ambiente para ajudar a desacelerar. |
-| 🆘 | **Rede de apoio** | CVV (188), busca de psicólogos, terapia online e conteúdo educativo. |
-| 🔐 | **Conta pessoal** | Cadastro e login, para que seus dados sejam só seus. |
+ Funcionalidade | O que faz |
+|---|---|
+ | **Registro de humor** | Registra como você está se sentindo hoje, de forma rápida. |
+ | **Diário** | Espaço livre para escrever pensamentos e reflexões. |
+ | **Histórico** | Reúne seus registros para você acompanhar a evolução. |
+ | **Respirar** | Exercício de respiração guiada no padrão **3-4-5**. |
+ | **Conversar** | Tela para conversar com a Pluma. |
+ | **Sons relaxantes** | Sons ambiente para ajudar a desacelerar. |
+ | **Rede de apoio** | CVV (188), busca de psicólogos, terapia online e conteúdo educativo. |
+ | **Conta pessoal** | Cadastro e login, para que seus dados sejam só seus. |
 
 ---
 
