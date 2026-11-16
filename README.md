@@ -118,13 +118,12 @@ Projeto desenvolvido por estudantes, com foco em acessibilidade, bem-estar e int
 
 Tsukii3
 
-Lucas
+lfzorzetti-eng 
 
-Igor Moura
+gustavobferrao
 
-Gustavo Ferrão
+Igorrmoura
 
-<!-- VERIFICAR: preencher integrantes, papéis e links do GitHub/LinkedIn -->
 
 ## Links
 
