@@ -1343,3 +1343,17 @@ a.card { text-decoration: none; color: inherit; }
 .logout-btn-side:hover {
     background: rgba(231, 76, 60, 0.1) !important;
 }
+.site-footer {
+    text-align: center;
+    padding: 1.5rem 1rem 2rem;
+}
+
+.site-footer a {
+    font-size: 0.85rem;
+    color: var(--cinza-medio);
+    text-decoration: none;
+}
+
+.site-footer a:hover {
+    text-decoration: underline;
+}
