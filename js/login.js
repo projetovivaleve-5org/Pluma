@@ -11,8 +11,10 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function initLogin() {
-    // Se o usuário já estiver logado, redireciona para a home
-    if (localStorage.getItem('pluma_logged_in') === 'true') {
+    // Se o usuário já estiver logado (token existe e não venceu), redireciona para a home.
+    // Não basta o pluma_logged_in: sem token válido as páginas mandam de volta para cá,
+    // e o login mandava para a home de novo (loop infinito entre as duas telas).
+    if (VivaLeveAPI.auth.logado()) {
         window.location.href = 'index.html';
         return;
     }

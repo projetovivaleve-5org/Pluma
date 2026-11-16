@@ -7,6 +7,9 @@
  *  - SUCCESS: resposta da IA
  *  - FALLBACK: IA fora do ar; o texto já é uma mensagem padrão gentil
  *  - CRISIS: frase de risco detectada; mostra a resposta + links do CVV/SAMU
+ *
+ * O botão de lixeira no cabeçalho apaga a conversa no back (DELETE /v1/ai/conversations/{id})
+ * e volta para a tela de boas-vindas; a próxima mensagem abre uma conversa nova.
  */
 
 class ChatManager {
@@ -17,7 +20,11 @@ class ChatManager {
         this.enviarBtn = document.getElementById('sendBtn');
         this.typingEl = document.getElementById('typingIndicator');
         this.boasVindasEl = this.mensagensEl.querySelector('.welcome-message');
+        // cópia das boas-vindas para mostrar de novo depois de limpar a conversa
+        this.boasVindasModelo = this.boasVindasEl ? this.boasVindasEl.cloneNode(true) : null;
+        this.limparBtn = document.getElementById('clearChatBtn');
         this.enviando = false;
+        this.limpando = false;
 
         this.registrarEventos();
 
@@ -43,10 +50,54 @@ class ChatManager {
 
         this.enviarBtn.addEventListener('click', () => this.enviar());
 
-        // Ações rápidas e sugestões usam data-message
-        document.querySelectorAll('.quick-action-btn, .suggestion-chip').forEach(btn => {
-            btn.addEventListener('click', () => this.enviar(btn.dataset.message));
+        if (this.limparBtn) {
+            this.limparBtn.addEventListener('click', () => this.limparConversa());
+        }
+
+        // Ações rápidas e sugestões usam data-message. Delegação no container: os botões das
+        // boas-vindas são recriados quando a conversa é limpa.
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('.quick-action-btn, .suggestion-chip');
+            if (btn) this.enviar(btn.dataset.message);
         });
+    }
+
+    /** Apaga a conversa no back e volta para as boas-vindas. */
+    async limparConversa() {
+        if (this.limpando || this.enviando) return;
+        if (!this.temMensagens()) return;
+        if (!confirm('Apagar esta conversa com a Pluma? As mensagens não poderão ser recuperadas.')) return;
+
+        this.limpando = true;
+        this.limparBtn.disabled = true;
+        try {
+            await this.api.ia.novaConversa();
+            this.mensagensEl.querySelectorAll('.message').forEach(m => m.remove());
+            if (!this.boasVindasEl && this.boasVindasModelo) {
+                this.boasVindasEl = this.boasVindasModelo.cloneNode(true);
+                this.mensagensEl.insertBefore(this.boasVindasEl, this.mensagensEl.firstChild);
+            }
+            this.inputEl.focus();
+        } catch (e) {
+            if (e.semLogin) {
+                this.pedirLogin();
+                return;
+            }
+            alert(this.api.mensagemErro(e, 'Não foi possível apagar a conversa. Tente de novo.'));
+        } finally {
+            this.limpando = false;
+            this.limparBtn.disabled = false;
+            this.atualizarBotaoLimpar();
+        }
+    }
+
+    temMensagens() {
+        return this.mensagensEl.querySelector('.message') !== null;
+    }
+
+    /** A lixeira só aparece quando há mensagens na tela. */
+    atualizarBotaoLimpar() {
+        if (this.limparBtn) this.limparBtn.hidden = !this.temMensagens();
     }
 
     async carregarHistorico() {
@@ -163,6 +214,7 @@ class ChatManager {
         msg.append(avatar, corpo);
         // mantém o "digitando..." sempre por último
         this.mensagensEl.insertBefore(msg, this.typingEl);
+        this.atualizarBotaoLimpar();
         this.rolarParaBaixo();
     }
 

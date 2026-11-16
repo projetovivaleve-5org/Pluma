@@ -545,6 +545,7 @@
     /** Manda para o login se não houver token válido. Use no começo de cada tela protegida. */
     function exigirLogin() {
         if (token() === null) {
+            auth.sair(); // tira o pluma_logged_in também, senão o login manda de volta (loop)
             window.location.href = "login.html";
             return false;
         }
@@ -562,6 +563,7 @@
     /** Se o erro for de sessão (401), leva para o login. Devolve true quando redirecionou. */
     function tratarSemLogin(e) {
         if (e && e.semLogin) {
+            auth.sair();
             window.location.href = "login.html";
             return true;
         }
