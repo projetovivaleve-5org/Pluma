@@ -1,6 +1,8 @@
 /* ============================================
    PLUMA - Estilos Principais
    Plataforma de Apoio Emocional
+   Versão com contraste revisado (WCAG 2.1 AA)
+   Trechos alterados estão marcados com "A11Y:"
    ============================================ */
 
 /* Reset e Base */
@@ -17,13 +19,18 @@
     --branco: #ffffff;
     --fundo-suave: #F4F8F4;
     --texto-escuro: #222222;
-    --verde-escuro: #6F9A57;
-    --lilas-escuro: #9A9AD2;
+    --verde-escuro: #3D6B2F;   /* A11Y: antes #6F9A57 (3,3:1) -> 6,3:1 sobre branco */
+    --lilas-escuro: #4B4B8F;   /* A11Y: antes #9A9AD2 (2,7:1) -> 7,8:1 sobre branco */
     --cinza-claro: #f5f5f5;
-    --cinza-medio: #888888;
+    --cinza-medio: #595959;    /* A11Y: antes #888888 (3,5:1) -> 7,0:1 sobre branco */
     --sombra: rgba(60, 90, 70, 0.10);
     --salvia: #A3C1AD;
     --texto-sobre-cor: #1f3527;
+
+    /* A11Y: novas variáveis */
+    --borda-input: #757575;        /* bordas de campos e fundo do toggle (4,6:1 sobre branco) */
+    --perigo: #B3261E;             /* ação de sair (6,5:1 sobre branco) */
+    --verde-texto-fixo: #3D6B2F;   /* texto/ícone sobre fundos claros fixos (não muda no modo escuro) */
     
     /* Tipografia */
     --font-principal: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -51,12 +58,17 @@
 
 /* Dark Mode */
 [data-theme="dark"] {
-    --verde-claro: #6F9A57;
+    --verde-claro: #8FBF72;    /* A11Y: antes #6F9A57 */
+    --verde-escuro: #A9D18E;   /* A11Y: verde claro para texto/ícones sobre fundo escuro (9,9:1) */
     --lilas-claro: #6E6EA8;
+    --lilas-escuro: #C5C5F2;   /* A11Y: lilás claro para texto sobre fundo escuro (10,3:1) */
     --branco: #1a1a2e;
     --fundo-suave: #16213e;
     --texto-escuro: #f0f0f0;
     --cinza-claro: #2a2a4a;
+    --cinza-medio: #B0B0C4;    /* A11Y: antes #888888 (3,9:1 sobre #2a2a4a) -> 6,4:1 */
+    --borda-input: #8585a5;    /* A11Y: 4,8:1 sobre #1a1a2e */
+    --perigo: #FF8A80;         /* A11Y: 7,5:1 sobre #1a1a2e */
     --sombra: rgba(0, 0, 0, 0.3);
 }
 
@@ -158,7 +170,7 @@ body {
 }
 
 .header .logo i {
-    color: var(--verde-claro);
+    color: var(--verde-escuro); /* A11Y: antes var(--verde-claro) */
 }
 
 /* Cards */
@@ -193,14 +205,15 @@ body {
     font-size: 1.5rem;
 }
 
+/* A11Y: cores fixas (iguais nos dois temas) para o ícone manter contraste sobre o fundo */
 .card-icon.verde {
-    background: linear-gradient(135deg, var(--verde-claro), #C4DDB0);
-    color: var(--verde-escuro);
+    background: linear-gradient(135deg, #9DC183, #C4DDB0);
+    color: #1f3527;
 }
 
 .card-icon.lilas {
-    background: linear-gradient(135deg, var(--lilas-claro), #D3D3F0);
-    color: var(--lilas-escuro);
+    background: linear-gradient(135deg, #E6E6FA, #D3D3F0);
+    color: #2d2d5a;
 }
 
 .card-title {
@@ -251,14 +264,15 @@ body {
     box-shadow: 0 5px 20px rgba(230, 230, 250, 0.4);
 }
 
+/* A11Y: borda e texto com verde escuro; hover com fundo escuro e texto "branco" do tema */
 .btn-outline {
     background: transparent;
-    border: 2px solid var(--verde-claro);
+    border: 2px solid var(--verde-escuro);
     color: var(--verde-escuro);
 }
 
 .btn-outline:hover {
-    background: var(--verde-claro);
+    background: var(--verde-escuro);
     color: var(--branco);
 }
 
@@ -283,10 +297,11 @@ body {
     color: var(--texto-escuro);
 }
 
+/* A11Y: borda dos campos com 3:1 ou mais; foco bem visível */
 .form-input {
     width: 100%;
     padding: var(--espacamento-md);
-    border: 2px solid var(--cinza-claro);
+    border: 2px solid var(--borda-input);
     border-radius: var(--borda-radius-md);
     font-family: var(--font-principal);
     font-size: 1rem;
@@ -296,8 +311,9 @@ body {
 }
 
 .form-input:focus {
-    outline: none;
-    border-color: var(--verde-claro);
+    outline: 3px solid var(--verde-escuro);
+    outline-offset: 2px;
+    border-color: var(--verde-escuro);
     box-shadow: 0 0 0 4px rgba(157, 193, 131, 0.2);
 }
 
@@ -326,7 +342,7 @@ body {
     width: 100%;
     min-height: 120px;
     padding: var(--espacamento-md);
-    border: 2px solid var(--cinza-claro);
+    border: 2px solid var(--borda-input);
     border-radius: var(--borda-radius-md);
     font-family: var(--font-principal);
     font-size: 1rem;
@@ -337,8 +353,9 @@ body {
 }
 
 .form-textarea:focus {
-    outline: none;
-    border-color: var(--verde-claro);
+    outline: 3px solid var(--verde-escuro);
+    outline-offset: 2px;
+    border-color: var(--verde-escuro);
     box-shadow: 0 0 0 4px rgba(157, 193, 131, 0.2);
 }
 
@@ -384,6 +401,11 @@ body {
 .badge-lilas {
     background: rgba(230, 230, 250, 0.4);
     color: var(--lilas-escuro);
+}
+
+/* A11Y: no modo escuro o fundo do badge lilás precisa ser mais escuro para o texto claro contrastar */
+[data-theme="dark"] .badge-lilas {
+    background: rgba(197, 197, 242, 0.15);
 }
 
 /* Alertas */
@@ -490,6 +512,7 @@ body {
     border-color: var(--verde-claro);
 }
 
+/* A11Y: ícone escuro sobre verde claro (antes branco sobre #9DC183 = 2,0:1; agora 6,5:1) */
 .useful-link i {
     width: 48px;
     height: 48px;
@@ -498,7 +521,7 @@ body {
     align-items: center;
     justify-content: center;
     background: var(--verde-claro);
-    color: var(--branco);
+    color: var(--texto-sobre-cor);
     font-size: 1.25rem;
     box-shadow: 0 4px 10px rgba(157, 193, 131, 0.3);
 }
@@ -650,6 +673,7 @@ body {
     height: 0;
 }
 
+/* A11Y: toggle desligado e ligado com contraste mínimo de 3:1 contra o fundo */
 .toggle-slider {
     position: absolute;
     cursor: pointer;
@@ -657,7 +681,7 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: var(--cinza-claro);
+    background: var(--borda-input);
     border-radius: 28px;
     transition: var(--transicao-rapida);
 }
@@ -676,7 +700,7 @@ body {
 }
 
 .toggle-switch input:checked + .toggle-slider {
-    background: var(--verde-claro);
+    background: var(--verde-escuro);
 }
 
 .toggle-switch input:checked + .toggle-slider::before {
@@ -744,9 +768,10 @@ body {
     color: var(--verde-escuro);
 }
 
+/* A11Y: contorno de foco com verde escuro (antes verde claro, 2,0:1) */
 .icon-btn:focus-visible,
 .side-link:focus-visible {
-    outline: 3px solid var(--verde-claro);
+    outline: 3px solid var(--verde-escuro);
     outline-offset: 2px;
 }
 
@@ -807,7 +832,7 @@ body {
 }
 
 .side-menu-header .logo i {
-    color: var(--verde-claro);
+    color: var(--verde-escuro); /* A11Y: antes var(--verde-claro) */
 }
 
 .side-menu-links {
@@ -874,7 +899,7 @@ body.menu-open {
     background: linear-gradient(135deg, #E6E6FA, #C9C9EE);
     color: #2d2d5a;
 }
-.btn-outline:hover { color: var(--texto-sobre-cor); }
+/* A11Y: o hover do .btn-outline agora vem da regra principal (fundo verde escuro, texto "branco" do tema) */
 
 .motivational-box {
     background: linear-gradient(135deg, #A3C1AD 0%, #9DC183 55%, #E6E6FA 130%);
@@ -883,6 +908,8 @@ body.menu-open {
 }
 .motivational-box .motivational-text,
 .motivational-box .motivational-author { color: #1f3527; }
+/* A11Y: autor sem transparência (antes opacity .7 = 3,6:1; agora 6,8:1) */
+.motivational-box .motivational-author { opacity: 1; }
 
 /* Cards gerais */
 .card {
@@ -986,7 +1013,8 @@ a.card { text-decoration: none; color: inherit; }
 }
 .humor-body { position: relative; z-index: 1; min-width: 0; }
 .cards-grid .card-humor .card-title { color: #1f3527; font-size: 1.2rem; }
-.cards-grid .card-humor .card-subtitle { color: rgba(31, 53, 39, 0.75); }
+/* A11Y: subtítulo sólido (antes rgba .75 = 4,0:1; agora 6,5:1) */
+.cards-grid .card-humor .card-subtitle { color: #1f3527; }
 .humor-faces { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
 .humor-faces span {
     width: 34px;
@@ -1083,10 +1111,11 @@ a.card { text-decoration: none; color: inherit; }
     color: #1f3527;
     position: relative;
 }
+/* A11Y: subtítulo sólido (antes rgba .72 = 3,7:1; agora 6,5:1 no pior fundo) */
 .cards-grid .card.card-mini .card-subtitle {
     font-size: 0.74rem;
     line-height: 1.3;
-    color: rgba(31, 53, 39, 0.72);
+    color: #1f3527;
     position: relative;
     padding-right: 26px;
 }
@@ -1139,7 +1168,7 @@ a.card { text-decoration: none; color: inherit; }
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--verde-claro);
+    background: var(--verde-escuro); /* A11Y: antes var(--verde-claro) */
     animation: som-pulso 1.6s ease-in-out infinite;
 }
 @keyframes som-pulso {
@@ -1201,7 +1230,7 @@ a.card { text-decoration: none; color: inherit; }
 .som-item:hover { transform: translateY(-1px); }
 .som-item[aria-pressed="true"] {
     background: rgba(157, 193, 131, 0.25);
-    border-color: var(--verde-claro);
+    border-color: var(--verde-escuro); /* A11Y: antes var(--verde-claro) */
 }
 .som-emoji {
     flex-shrink: 0;
@@ -1241,9 +1270,10 @@ a.card { text-decoration: none; color: inherit; }
 }
 .som-controles input[type="range"] { flex: 1; accent-color: var(--verde-escuro); }
 .som-vol-ico { font-size: 1rem; }
+/* A11Y: borda e texto com verde escuro; hover com fundo verde escuro e texto do tema */
 .som-parar {
     padding: 6px 14px;
-    border: 2px solid var(--verde-claro);
+    border: 2px solid var(--verde-escuro);
     border-radius: 999px;
     background: transparent;
     color: var(--verde-escuro);
@@ -1252,17 +1282,18 @@ a.card { text-decoration: none; color: inherit; }
     font-weight: 600;
     cursor: pointer;
 }
-.som-parar:hover { background: var(--verde-claro); color: var(--texto-sobre-cor); }
+.som-parar:hover { background: var(--verde-escuro); color: var(--branco); }
 .som-parar:disabled { opacity: 0.4; cursor: default; }
 @media (prefers-reduced-motion: reduce) {
     .som-eq i, .icon-btn.tocando::after { animation: none; }
 }
 
 /* Estilização dos ícones do Font Awesome nas badges */
+/* A11Y: cor fixa, pois o fundo da badge é sempre claro (no modo escuro, var(--verde-escuro) ficaria claro demais) */
 .mini-badge i,
 .humor-badge i,
 .humor-faces span i {
-    color: var(--verde-escuro);
+    color: var(--verde-texto-fixo);
     font-size: 1.1rem;
 }
 
@@ -1305,7 +1336,7 @@ a.card { text-decoration: none; color: inherit; }
 
 .user-avatar i {
     font-size: 2rem;
-    color: var(--verde-claro);
+    color: var(--verde-escuro); /* A11Y: antes var(--verde-claro) */
 }
 
 .user-info {
@@ -1330,12 +1361,13 @@ a.card { text-decoration: none; color: inherit; }
     gap: var(--espacamento-xs);
 }
 
+/* A11Y: vermelho com contraste (antes #e74c3c = 3,8:1 no claro) */
 .logout-btn-side {
     width: 100%;
     background: none;
     border: none;
     cursor: pointer;
-    color: #e74c3c !important;
+    color: var(--perigo) !important;
     text-align: left;
     font-family: inherit;
 }
@@ -1356,4 +1388,29 @@ a.card { text-decoration: none; color: inherit; }
 
 .site-footer a:hover {
     text-decoration: underline;
+}
+
+/* ============================================
+   A11Y: INDICADOR DE FOCO (teclado)
+   Contorno visível em todos os elementos interativos
+   ============================================ */
+a:focus-visible,
+button:focus-visible,
+.btn:focus-visible,
+.card:focus-visible,
+.useful-link:focus-visible,
+.som-item:focus-visible,
+.som-parar:focus-visible,
+.logout-btn-side:focus-visible,
+.site-footer a:focus-visible,
+input[type="range"]:focus-visible,
+select:focus-visible {
+    outline: 3px solid var(--verde-escuro);
+    outline-offset: 3px;
+}
+
+/* O input do toggle é invisível (opacity 0), então o foco aparece no controle visual */
+.toggle-switch input:focus-visible + .toggle-slider {
+    outline: 3px solid var(--verde-escuro);
+    outline-offset: 3px;
 }
