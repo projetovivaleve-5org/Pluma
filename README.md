@@ -114,13 +114,10 @@ Pluma/
 
 Projeto desenvolvido por estudantes, com foco em acessibilidade, bem-estar e interação do usuário.
 
-- Tsukii3
-
-- lfzorzetti-eng 
-
-- gustavobferrao
-
-- Igorrmoura
+- [Tsukii3](https://github.com/Tsukii3)
+- [lfzorzetti-eng](https://github.com/lfzorzetti-eng)
+- [gustavobferrao](https://github.com/gustavobferrao)
+- [Igorrmoura](https://github.com/Igorrmoura)
 
 
 ## Links
