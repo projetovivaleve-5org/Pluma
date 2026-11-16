@@ -1,8 +1,8 @@
 /**
  * PLUMA - Registro de Humor
  * Salva no back-end (precisa de login):
- *  - /v1/mood-logs: emoção da tela (OTIMO..ANSIOSO) + nota. Alimenta o Histórico. Limite: 3 por dia.
- *  - /v1/entries: o mesmo registro com as atividades. Alimenta a IA (insights) e as estatísticas.
+ *  - /v1/mood-logs: emoção da tela (OTIMO..ANSIOSO) + atividades + nota. Limite: 3 por dia.
+ *    Alimenta o Histórico, as estatísticas e a IA.
  */
 
 const api = window.VivaLeveAPI;
@@ -145,23 +145,11 @@ async function saveMoodRecord() {
     setSalvando(true);
 
     try {
-        // 1) Registro de humor (Histórico). Se falhar (ex.: limite de 3 por dia), nada é salvo.
-        await api.humor.criar(api.emocao.paraApi(selectedEmotion), note || null);
-
-        // 2) Mesmo registro com as atividades, para a IA e as estatísticas. Não bloqueia se falhar.
         const atividades = selectedActivities
             .map(a => api.ATIVIDADE_PARA_API[a])
             .filter(Boolean);
-        try {
-            await api.registros.criar({
-                mood: api.HUMOR_PARA_REGISTRO[selectedEmotion] || 'NEUTRAL',
-                activities: atividades,
-                note: note || null
-            });
-        } catch (e) {
-            if (api.tratarSemLogin(e)) return;
-            console.warn('[Pluma] Registro salvo no histórico, mas não nas estatísticas da IA:', e.message);
-        }
+        // Se falhar (ex.: limite de 3 por dia), nada é salvo.
+        await api.humor.criar(api.emocao.paraApi(selectedEmotion), note || null, atividades);
 
         showSaveConfirmation();
     } catch (e) {

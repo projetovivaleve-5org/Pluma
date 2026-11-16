@@ -6,9 +6,8 @@
  * - Módulos (window.VivaLeveAPI.*):
  *     auth               /v1/auth/*                 login, cadastro, Google
  *     usuarios           /v1/users/me               usuário logado
- *     registros          /v1/entries                registros de humor (GREAT..AWFUL + atividades)
  *     estatisticas       /v1/stats                  resumo, sequência, evolução e distribuição
- *     humor              /v1/mood-logs              registro rápido de humor (OTIMO..ANSIOSO)
+ *     humor              /v1/mood-logs              registro de humor (OTIMO..ANSIOSO + atividades)
  *     diario             /v1/diary                  diário
  *     respiracao         /v1/breathing/*            sessões e estatísticas de respiração
  *     historicoEmocional /api/history/*             gráficos do histórico emocional
@@ -47,10 +46,9 @@
         CONVERSA_PREFIXO: "pluma_chat_conversa_"
     };
 
-    // Valores aceitos pelo back. ATENÇÃO: existem DOIS conjuntos de humor diferentes.
+    // Valores aceitos pelo back.
     const ENUMS = {
-        // /v1/entries
-        HUMOR_REGISTRO: ["GREAT", "GOOD", "NEUTRAL", "BAD", "AWFUL"],
+        // atividades do /v1/mood-logs
         ATIVIDADES: ["EXERCISE", "WORK", "STUDY", "READING", "FAMILY", "FRIENDS", "HOBBY", "REST", "SLEEP_WELL", "MEDITATION"],
         // /v1/mood-logs, /v1/diary (emotion) e /api/history
         HUMOR: ["OTIMO", "BEM", "MAIS_OU_MENOS", "MAL", "DEPRESSIVO", "ANSIOSO"]
@@ -269,41 +267,6 @@
         }
     };
 
-    // ------------------------------------------------------------ registros (/v1/entries)
-
-    const registros = {
-        /** Lista os registros do usuário: [{ id, mood, activities, note, date, createdAt, updatedAt }]. */
-        listar() {
-            return http.get("/v1/entries");
-        },
-
-        /**
-         * Cria um registro. mood: GREAT|GOOD|NEUTRAL|BAD|AWFUL (obrigatório).
-         * activities: lista de ENUMS.ATIVIDADES. date: "AAAA-MM-DD" (padrão: hoje).
-         */
-        criar({ mood, activities = [], note = null, date } = {}) {
-            exigirEnum(mood, ENUMS.HUMOR_REGISTRO, "mood");
-            activities.forEach((a) => exigirEnum(a, ENUMS.ATIVIDADES, "activities"));
-            return http.post("/v1/entries", { mood, activities, note, date: date || dataLocal() });
-        },
-
-        buscar(id) {
-            return http.get(`/v1/entries/${id}`);
-        },
-
-        /** Atualiza (PUT substitui tudo): mood e date são obrigatórios. */
-        atualizar(id, { mood, activities = [], note = null, date } = {}) {
-            exigirEnum(mood, ENUMS.HUMOR_REGISTRO, "mood");
-            activities.forEach((a) => exigirEnum(a, ENUMS.ATIVIDADES, "activities"));
-            exigir(date, "date (AAAA-MM-DD)");
-            return http.put(`/v1/entries/${id}`, { mood, activities, note, date });
-        },
-
-        apagar(id) {
-            return http.delete(`/v1/entries/${id}`);
-        }
-    };
-
     // ------------------------------------------------------------ estatísticas (/v1/stats)
 
     const estatisticas = {
@@ -319,11 +282,18 @@
     // ------------------------------------------------------------ registro rápido de humor (/v1/mood-logs)
 
     // ATENÇÃO: no POST/PUT o back só aceita multipart/form-data (o campo opcional "image" é um arquivo),
-    // então mood e note vão num FormData, e não em JSON. O mood é OTIMO|BEM|... (não GREAT|GOOD).
-    function formHumor(mood, note) {
+    // então mood, note e activities vão num FormData, e não em JSON. O mood é OTIMO|BEM|...
+    // activities: uma entrada "activities" por atividade. No PUT, activities = null mantém as atuais.
+    function formHumor(mood, note, activities) {
         const form = new FormData();
         form.append("mood", mood);
         if (note) form.append("note", note);
+        if (activities) {
+            activities.forEach((a) => {
+                exigirEnum(a, ENUMS.ATIVIDADES, "activities");
+                form.append("activities", a);
+            });
+        }
         return form;
     }
 
@@ -343,14 +313,16 @@
             return http.get("/v1/mood-logs/today");
         },
 
-        criar(mood, note) {
+        /** activities: lista de ENUMS.ATIVIDADES (opcional). A resposta inclui activities. */
+        criar(mood, note, activities = []) {
             exigirEnum(mood, ENUMS.HUMOR, "mood");
-            return request("/v1/mood-logs", { method: "POST", body: formHumor(mood, note) });
+            return request("/v1/mood-logs", { method: "POST", body: formHumor(mood, note, activities) });
         },
 
-        atualizar(id, mood, note) {
+        /** activities = null (padrão) mantém as atividades já salvas; [] apaga todas. */
+        atualizar(id, mood, note, activities = null) {
             exigirEnum(mood, ENUMS.HUMOR, "mood");
-            return request(`/v1/mood-logs/${id}`, { method: "PUT", body: formHumor(mood, note) });
+            return request(`/v1/mood-logs/${id}`, { method: "PUT", body: formHumor(mood, note, activities) });
         },
 
         apagar(id) {
@@ -532,9 +504,9 @@
             });
         },
 
-        /** Comentário acolhedor sobre um registro de humor salvo no back (/v1/entries/{id}). */
-        reflexaoRegistro(entryId) {
-            return request(`/v1/ai/entries/${entryId}/reflection`, {
+        /** Comentário acolhedor sobre um registro de humor salvo no back (id do /v1/mood-logs). */
+        reflexaoRegistro(moodLogId) {
+            return request(`/v1/ai/mood-logs/${moodLogId}/reflection`, {
                 method: "POST",
                 body: JSON.stringify({ userName: nomeParaIa() })
             });
@@ -554,19 +526,6 @@
         daApi(valor) {
             return valor ? String(valor).toLowerCase().replace(/_/g, "-") : null;
         }
-    };
-
-    /**
-     * Humor da tela (6 opções) -> humor do /v1/entries (5 opções), usado pela IA e pelas estatísticas.
-     * "ansioso" não existe no /v1/entries: vira BAD.
-     */
-    const HUMOR_PARA_REGISTRO = {
-        "otimo": "GREAT",
-        "bem": "GOOD",
-        "mais-ou-menos": "NEUTRAL",
-        "mal": "BAD",
-        "depressivo": "AWFUL",
-        "ansioso": "BAD"
     };
 
     /** Atividades da tela (data-activity) -> ENUMS.ATIVIDADES. */
@@ -621,7 +580,6 @@
         request,
         auth,
         usuarios,
-        registros,
         estatisticas,
         humor,
         diario,
@@ -632,7 +590,6 @@
         ENUMS,
         dataLocal,
         emocao,
-        HUMOR_PARA_REGISTRO,
         ATIVIDADE_PARA_API,
         exigirLogin,
         mensagemErro,
